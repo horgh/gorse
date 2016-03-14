@@ -8,9 +8,9 @@ of the feeds.
 Directories:
 
   * gorse: A web frontend to a database of feeds/feed items
-	* gorsepoll: A utility to retrieve feed items and insert them into a
-	  database
-	* gorselib: Library shared by the above.
+  * gorsepoll: A utility to retrieve feed items and insert them into a
+    database
+  * gorselib: Library shared by the above.
 
 
 # Gorsepoll
