@@ -1,0 +1,111 @@
+body {
+	margin: 0;
+	padding: 0;
+}
+
+a {
+	text-decoration: none;
+}
+
+div#top-bar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	text-align: right;
+	height: 5%;
+}
+div#top-bar button {
+	height: 100%;
+	width: 10%;
+	background-color: #ff5ff7;
+	border-radius: 10%;
+	color: #ffffff;
+	border: 1px solid black;
+}
+
+ul.success {
+	background-color: green;
+	color: white;
+	list-style: none;
+	padding: 15px;
+	border-radius: 15px;
+	width: 50%;
+}
+
+a.expand_feeds {
+	font-size: small;
+	font-weight: normal;
+}
+
+ul#feeds {
+	margin: 0;
+	padding: 0;
+	list-style: none inside none;
+	font-size: small;
+}
+ul#feeds li {
+	margin: 0;
+	padding: 0;
+}
+ul#feeds li h3 {
+	font-size: small;
+	display: inline-block;
+	margin: 0;
+	padding: 0;
+}
+ul#feeds li span {
+	font-size: smaller;
+}
+ul#feeds li span span.next_time {
+	font-weight: bold;
+}
+ul#feeds li span span.update_times {
+	font-style: italic;
+}
+
+div.update_button {
+	width: 100%;
+	text-align: right;
+	margin: 0 0 10px 0;
+	padding: 0;
+}
+div.update_button button {
+	padding: 25px 50px;
+	right: 0;
+}
+
+ul#items {
+	margin: 0;
+	padding: 0;
+	list-style: none inside none;
+}
+ul#items li {
+	margin: 0;
+	padding: 10px 5px 10px 5px;
+}
+ul#items li.row1 {
+	background-color: #99FFFF;
+}
+ul#items li.row2 {
+	background-color: #66CCFF;
+}
+ul#items li.clicked {
+	background-color: #99FF33;
+}
+ul#items li h1 {
+	font-size: medium;
+	margin: 0;
+	padding: 0;
+}
+ul#items li h1 a {
+	font-weight: normal;
+}
+ul#items li h1 .date {
+	font-size: small;
+	font-weight: normal;
+}
+ul#items li p {
+	margin: 0;
+	padding: 0;
+}

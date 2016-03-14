@@ -1,0 +1,6 @@
+DbUser =
+DbPass =
+DbName =
+DbHost =
+# nonzero to turn quiet mode on, 0 for more verbose output.
+Quiet = 0

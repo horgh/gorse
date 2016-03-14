@@ -1,0 +1,68 @@
+<div id="top-bar"><button id="update-flags-top">Save</button></div>
+
+{{range $index, $element := .SuccessMessages}}
+	<ul class="success">
+		<li>
+			{{$element}}
+		</li>
+	</ul>
+{{end}}
+
+<h2>
+	Feeds
+	<a href="#" class="expand_feeds"></a>
+</h2>
+<ul id="feeds">
+	{{range $index, $element := .Feeds}}
+		<li>
+			<h3>{{.Name}}</h3>
+			<span>
+				(next update in
+				<span class="next_time">
+					{{$element.GetDurationUntilNextUpdateForDisplay}})
+				</span>
+
+				<span class="update_times">
+					(last updated {{$element.GetDurationSinceUpdateForDisplay}} ago)
+					(updates every {{$element.GetUpdateFrequencyForDisplay}})
+				</span>
+			</span>
+		</li>
+	{{end}}
+</ul>
+
+<p>Showing {{len .Items}} feed items.</p>
+
+<form action="{{.Path}}update_read_flags"
+	method="POST"
+	autocomplete="off"
+	id="list-items-form"
+	>
+
+	<ul id="items">
+		{{range $index, $element := .Items}}
+			{{$rowClass := getRowCssClass $index}}
+			<li class="{{$rowClass}}">
+				<h1>
+					<a href="#" class="check-it" data-id="{{.Id}}">✓</a>
+					{{.FeedName}}
+					<a href="{{.Uri}}">{{.Title}}</a>
+					<span class="date">
+						({{.PublicationDateString}})
+					</span>
+				</h1>
+
+				<p>{{.DescriptionHTML}}</p>
+
+				<input type="hidden"
+					class="item_id"
+					name="item_id"
+					value="{{.Id}}"
+					>
+			</li>
+		{{else}}
+				No unread items found.
+			</li>
+		{{end}}
+	</ul>
+</form>

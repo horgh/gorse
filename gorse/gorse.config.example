@@ -1,0 +1,26 @@
+# http listen host.
+ListenHost = 127.0.0.1
+# http listen port.
+ListenPort = 9901
+
+DbUser =
+DbPass =
+DbName =
+DbHost =
+
+# timezone used for displaying publication dates.
+DisplayTimeZone = America/Vancouver
+
+# http URI request path.
+# for example, if we are running from a URI like this:
+# http://www.summercat.com/gorse
+# then the prefix we should set here is '/gorse'.
+# we need this so we can strip prefixes and recognise path patterns.
+UriPrefix = /gorse
+
+# session cookie authentication key.
+# recommended to be 32 or 64 bytes.
+CookieAuthenticationKey =
+
+# our session name.
+SessionName = gorse
