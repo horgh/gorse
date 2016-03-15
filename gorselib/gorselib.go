@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -76,8 +77,8 @@ type RssItem struct {
 	PublicationDateString string
 }
 
-// abstracted from ItemXml and RDFItemXML.
-// why? because I will convert ItemXml and RDFItemXML both
+// abstracted from ItemXML and RDFItemXML.
+// why? because I will convert ItemXML and RDFItemXML both
 // into this form.
 type Item struct {
 	Title       string
@@ -87,8 +88,8 @@ type Item struct {
 	Guid        string
 }
 
-// abstracted from ChannelXml
-// why? because I will convert ItemXml and RDFItemXML both
+// abstracted from ChannelXML
+// why? because I will convert ItemXML and RDFItemXML both
 // into Item and need to then store it here.
 type Channel struct {
 	Title         string
@@ -99,10 +100,10 @@ type Channel struct {
 	Items         []Item
 }
 
-// these *Xml structs are for parsing the XML - we fill them up
+// these *XML structs are for parsing the XML - we fill them up
 // with data we parse out. however, they are also specially set up
 // for the xml.Unmarshal() function (i.e., the tags on each field)
-type ItemXml struct {
+type ItemXML struct {
 	XMLName     xml.Name `xml:"item"`
 	Title       string   `xml:"title"`
 	Link        string   `xml:"link"`
@@ -110,14 +111,15 @@ type ItemXml struct {
 	PubDate     string   `xml:"pubDate"`
 	Guid        string   `xml:"guid"`
 }
-type ChannelXml struct {
+
+type ChannelXML struct {
 	XMLName       xml.Name  `xml:"channel"`
 	Title         string    `xml:"title"`
 	Link          string    `xml:"link"`
 	Description   string    `xml:"description"`
 	PubDate       string    `xml:"pubDate"`
 	LastBuildDate string    `xml:"lastBuildDate"`
-	Items         []ItemXml `xml:"item"`
+	Items         []ItemXML `xml:"item"`
 }
 
 // <rdf> item
@@ -131,16 +133,21 @@ type RDFItemXML struct {
 	Guid string `xml:"guid"`
 }
 
-type RssXml struct {
-	// apparently XMLName is optional. if specified, we must have
-	// this element as the root.
-	// to allow for <rdf> as well as <rss>, don't specify it.
-	//XMLName xml.Name   `xml:"rss"`
-	Channel ChannelXml `xml:"channel"`
+type RSSXML struct {
+	// If xml.Name is specified and has a tag name, we must have this element as
+	// the root. I don't do this though because it is case sensitive. Instead,
+	// inspect XMLName manually afterwards.
+	XMLName xml.Name
+	Channel ChannelXML `xml:"channel"`
+	Version string     `xml:"version,attr"`
+}
+
+type RDFXML struct {
+	XMLName xml.Name
+	Channel ChannelXML `xml:"channel"`
 	Version string     `xml:"version,attr"`
 
-	// in the case of <rdf> we'll have <item> elements
-	// directly as children.
+	// For RDF we'll have <item> elements directly as children.
 	RDFItems []RDFItemXML `xml:"item"`
 }
 
@@ -240,82 +247,158 @@ func GetItemPubDate(pubDate string) time.Time {
 	return time.Now()
 }
 
-// ParseFeedXml takes the raw xml and returns a struct describing the
+// ParseFeedXML takes the raw xml and returns a struct describing the
 // feed data.
-func ParseFeedXml(data []byte) (*Channel, error) {
-	// to see how Unmarshal() works, refer to the documentation.
-	// basically we have to tag the struct fields in the special
-	// format as in the above structs.
-	rssXml := RssXml{}
-
-	// we can use xml.Unmarshal() except in cases where we need to
-	// convert between charsets.
-	// for example if we have:
-	// <?xml version="1.0" encoding="ISO-8859-1"?>
-	// then we have to create an xml.Decoder and provide it a CharsetReader
-	// function.
-	// see http://stackoverflow.com/questions/6002619/unmarshal-an-iso-8859-1-xml-input-in-go
-	//err := xml.Unmarshal(data, &rssXml)
-
-	// Decoder wants an io.Reader.
-	// wrap up our byte slice so it can be one.
-	byteReader := bytes.NewBuffer(data)
-	decoder := xml.NewDecoder(byteReader)
-	decoder.CharsetReader = charset.NewReader
-	err := decoder.Decode(&rssXml)
+func ParseFeedXML(data []byte) (*Channel, error) {
+	// It is possible for us to not have valid XML. In such a case, the xml
+	// Decode function will not always complain. One way for this to happen is if
+	// you do not specify what tag the XML must start with.
+	err := looksLikeXML(data)
 	if err != nil {
-		log.Printf("XML decode error: %v", err)
 		return nil, err
 	}
 
-	if !config.Quiet {
-		log.Printf("Parsed channel [%s]", rssXml.Channel.Title)
+	channelRSS, err := parseAsRSS(data)
+	if err == nil {
+		return channelRSS, nil
 	}
 
-	// start building channel.
-	// to allow for both rss and rdf formats we pull out what we need
-	// from ChannelXml and ItemXml into this type.
+	channelRDF, err := parseAsRDF(data)
+	if err == nil {
+		return channelRDF, nil
+	}
+
+	return nil, errors.New("Unable to parse as RSS or RDF.")
+}
+
+// looksLikeXML applies some simple checks that we have an XML document.
+func looksLikeXML(data []byte) error {
+	prefix := `<?xml version="1.0" encoding="`
+
+	if len(data) < len(prefix) {
+		return errors.New("Buffer is too short to have XML header.")
+	}
+
+	for i := 0; i < len(prefix); i++ {
+		if data[i] != prefix[i] {
+			return errors.New("Buffer does not have XML header.")
+		}
+	}
+
+	return nil
+}
+
+// parseAsRSS attempts to parse the buffer as if it contains an RSS feed.
+func parseAsRSS(data []byte) (*Channel, error) {
+	// Decode from XML.
+
+	// To see how Unmarshal() works, refer to the documentation.
+	// Basically we have to tag the struct fields in the special format as in the
+	// package structs.
+	rssXML := RSSXML{}
+
+	// We can use xml.Unmarshal() except in cases where we need to convert between
+	// charsets. Which we want to be able to do, so we do not use Unmarshal().
+	// For example if we have:
+	// <?xml version="1.0" encoding="ISO-8859-1"?>
+	// Then we have to create an xml.Decoder and provide it a CharsetReader
+	// function.
+	// see http://stackoverflow.com/questions/6002619/unmarshal-an-iso-8859-1-xml-input-in-go
+
+	// Decoder wants an io.Reader.
+	byteReader := bytes.NewBuffer(data)
+
+	decoder := xml.NewDecoder(byteReader)
+
+	decoder.CharsetReader = charset.NewReader
+
+	err := decoder.Decode(&rssXML)
+	if err != nil {
+		return nil, fmt.Errorf("RSS XML decode error: %v", err)
+	}
+
+	if strings.ToLower(rssXML.XMLName.Local) != "rss" {
+		return nil, errors.New("Base tag is not RSS.")
+	}
+
+	// Build a channel struct now. It's common to the base formats we support.
+
 	channel := Channel{
-		Title:         rssXml.Channel.Title,
-		Link:          rssXml.Channel.Link,
-		Description:   rssXml.Channel.Description,
-		PubDate:       rssXml.Channel.PubDate,
-		LastBuildDate: rssXml.Channel.LastBuildDate,
+		Title:         rssXML.Channel.Title,
+		Link:          rssXML.Channel.Link,
+		Description:   rssXML.Channel.Description,
+		PubDate:       rssXML.Channel.PubDate,
+		LastBuildDate: rssXML.Channel.LastBuildDate,
 	}
 
-	// only one item set should be available.
-	// RDF has RDFItems whereas RSS has them in the channel.
-	if len(rssXml.RDFItems) > 0 && len(rssXml.Channel.Items) > 0 {
-		return nil, errors.New("Unexpected feed item locations.")
+	if !config.Quiet {
+		log.Printf("Parsed channel as RSS [%s]", channel.Title)
 	}
 
-	// pull out the items. two locations: one for rss, one for rdf.
-	if len(rssXml.RDFItems) > 0 {
-		for _, item := range rssXml.RDFItems {
-			channel.Items = append(channel.Items, Item{
+	// TODO: Should we report if there are no items at all as an error?
+
+	for _, item := range rssXML.Channel.Items {
+		channel.Items = append(channel.Items,
+			Item{
 				Title:       item.Title,
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
 				Guid:        item.Guid,
 			})
-		}
-	} else {
-		for _, item := range rssXml.Channel.Items {
-			channel.Items = append(channel.Items, Item{
-				Title:       item.Title,
-				Link:        item.Link,
-				Description: item.Description,
-				PubDate:     item.PubDate,
-				Guid:        item.Guid,
-			})
-		}
 	}
 
 	return &channel, nil
 }
 
-// WriteFeedXml takes an RssFeed and generates and writes an XML file.
+// parseAsRDF attempts to parse the buffer as if it contains an RDF feed.
+//
+// See parseAsRSS().
+func parseAsRDF(data []byte) (*Channel, error) {
+	rdfXML := RDFXML{}
+
+	byteReader := bytes.NewBuffer(data)
+	decoder := xml.NewDecoder(byteReader)
+	decoder.CharsetReader = charset.NewReader
+
+	err := decoder.Decode(&rdfXML)
+	if err != nil {
+		return nil, fmt.Errorf("RDF XML decode error: %v", err)
+	}
+
+	if strings.ToLower(rdfXML.XMLName.Local) != "rdf" {
+		return nil, errors.New("Base tag is not RDF.")
+	}
+
+	// TODO: Does RDF have all of these fields?
+
+	channel := Channel{
+		Title:         rdfXML.Channel.Title,
+		Link:          rdfXML.Channel.Link,
+		Description:   rdfXML.Channel.Description,
+		PubDate:       rdfXML.Channel.PubDate,
+		LastBuildDate: rdfXML.Channel.LastBuildDate,
+	}
+
+	if !config.Quiet {
+		log.Printf("Parsed channel as RDF [%s]", channel.Title)
+	}
+
+	for _, item := range rdfXML.RDFItems {
+		channel.Items = append(channel.Items,
+			Item{
+				Title:       item.Title,
+				Link:        item.Link,
+				Description: item.Description,
+				PubDate:     item.PubDate,
+				Guid:        item.Guid,
+			})
+	}
+
+	return &channel, nil
+}
+
+// WriteFeedXML takes an RssFeed and generates and writes an XML file.
 // this generates RSS 2.0.1.
 // see http://www.rssboard.org/rss-specification
 // validate the output files using:
@@ -326,10 +409,10 @@ func ParseFeedXml(data []byte) (*Channel, error) {
 // NOTE: a note on timestamps. the rss spec says we should use
 //   RFC 822, but the time.RFC1123Z format looks closest to their
 //   examples, so I use that.
-func WriteFeedXml(feed *RssFeed, filename string) error {
+func WriteFeedXML(feed *RssFeed, filename string) error {
 	// top level element. version is required. we use 2.0 even though we
 	// are generating 2.0.1 as that, it seems, is the spec.
-	rss := RssXml{Version: "2.0"}
+	rss := RSSXML{Version: "2.0"}
 
 	// set up the channel metadata.
 	// <channel/>
@@ -354,7 +437,7 @@ func WriteFeedXml(feed *RssFeed, filename string) error {
 	//     <pubDate/> When the item was published
 	//     <guid/> Arbitrary string unique to the item
 	for _, item := range feed.Items {
-		itemXml := ItemXml{
+		itemXML := ItemXML{
 			Title:       item.Title,
 			Link:        item.Uri,
 			Description: item.Description,
@@ -364,7 +447,7 @@ func WriteFeedXml(feed *RssFeed, filename string) error {
 			// other than it is intended to be unique.
 			Guid: item.Uri,
 		}
-		rss.Channel.Items = append(rss.Channel.Items, itemXml)
+		rss.Channel.Items = append(rss.Channel.Items, itemXML)
 	}
 
 	// build the xml data.

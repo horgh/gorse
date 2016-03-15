@@ -179,10 +179,9 @@ func updateFeed(config *GorsePollConfig, db *sql.DB,
 	}
 
 	// parse the XML response.
-	channel, err := gorselib.ParseFeedXml(xmlData)
+	channel, err := gorselib.ParseFeedXML(xmlData)
 	if err != nil {
-		log.Print("Failed to parse XML of feed: " + err.Error())
-		return err
+		return fmt.Errorf("Failed to parse XML of feed: %v", err.Error())
 	}
 
 	// record information about each item we parsed.
@@ -240,34 +239,46 @@ WHERE id = $1
 // details if we retrieved it.
 // if there was an error, we return an error, otherwise we return nil.
 func processFeeds(config *GorsePollConfig, db *sql.DB,
-	feeds []gorselib.RssFeed) error {
+	feeds []gorselib.RssFeed, forceUpdate bool) error {
+
 	feedsUpdated := 0
+
 	for _, feed := range feeds {
-		// check if we need to update.
-		// we do this by looking at how long ago the last update time was.
-		var timeSince time.Duration = time.Since(feed.LastUpdateTime)
-		if config.Quiet == 0 {
-			log.Printf("Feed [%s] was updated [%d] second(s) ago, and stored update frequency is %d second(s).",
-				feed.Name, int64(timeSince.Seconds()), feed.UpdateFrequencySeconds)
-		}
-		if int64(timeSince.Seconds()) < feed.UpdateFrequencySeconds {
+		// Check if we need to update.
+		// We may be always forcing an update.
+		// If not, we decide based on when we last updated the feed.
+		if !forceUpdate {
+			var timeSince time.Duration = time.Since(feed.LastUpdateTime)
+
 			if config.Quiet == 0 {
-				log.Print("Skipping update.")
+				log.Printf("Feed [%s] was updated [%d] second(s) ago, and stored update frequency is %d second(s).",
+					feed.Name, int64(timeSince.Seconds()), feed.UpdateFrequencySeconds)
 			}
-			continue
+
+			if int64(timeSince.Seconds()) < feed.UpdateFrequencySeconds {
+				if config.Quiet == 0 {
+					log.Print("Skipping update.")
+				}
+				continue
+			}
 		}
-		// perform our update.
+
+		// Perform our update.
+
 		if config.Quiet == 0 {
 			log.Printf("Updating feed [%s]", feed.Name)
 		}
+
 		err := updateFeed(config, db, &feed)
 		if err != nil {
-			log.Print("Failed to update feed: " + feed.Name + " " + err.Error())
+			log.Print("Failed to update feed: " + feed.Name + ": " + err.Error())
 			continue
 		}
+
 		if config.Quiet == 0 {
 			log.Printf("Updated feed [%s]", feed.Name)
 		}
+
 		// record that we have performed an update of this feed.
 		// do this after we have successfully updated the feed so as to
 		// ensure we try repeatedly in case of transient errors e.g. if
@@ -278,6 +289,7 @@ func processFeeds(config *GorsePollConfig, db *sql.DB,
 				err.Error())
 			return err
 		}
+
 		feedsUpdated++
 	}
 	if config.Quiet == 0 {
@@ -294,8 +306,9 @@ func main() {
 		"Single feed name to process. Process all feeds if not given.")
 	configPath := flag.String("config-file", "",
 		"Path to a configuration file.")
+	forceUpdate := flag.Bool("force-update", false, "Force updates by ignoring the last update time on feeds.")
 	flag.Parse()
-	// config file is required.
+
 	if len(*configPath) == 0 {
 		log.Print("You must specify a configuration file.")
 		flag.PrintDefaults()
@@ -325,7 +338,7 @@ func main() {
 	// set gorselib settings.
 	gorselib.SetQuiet(settings.Quiet != 0)
 
-	// retrieve our feeds.
+	// Retrieve our feeds from the database.
 	feeds, err := gorselib.RetrieveFeeds(db)
 	if err != nil {
 		log.Fatal("Failed to retrieve feeds: " + err.Error())
@@ -351,7 +364,7 @@ func main() {
 	}
 
 	// process & update our feeds.
-	err = processFeeds(&settings, db, feeds)
+	err = processFeeds(&settings, db, feeds, *forceUpdate)
 	if err != nil {
 		log.Fatal("Failed to process feed(s)")
 	}
