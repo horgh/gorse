@@ -258,17 +258,18 @@ func ParseFeedXML(data []byte) (*Channel, error) {
 		return nil, err
 	}
 
-	channelRSS, err := parseAsRSS(data)
-	if err == nil {
+	channelRSS, errRSS := parseAsRSS(data)
+	if errRSS == nil {
 		return channelRSS, nil
 	}
 
-	channelRDF, err := parseAsRDF(data)
-	if err == nil {
+	channelRDF, errRDF := parseAsRDF(data)
+	if errRDF == nil {
 		return channelRDF, nil
 	}
 
-	return nil, errors.New("Unable to parse as RSS or RDF.")
+	return nil, fmt.Errorf("Unable to parse as RSS (%v) or RDF (%v)", errRSS,
+		errRDF)
 }
 
 // looksLikeXML applies some simple checks that we have an XML document.
@@ -412,7 +413,10 @@ func parseAsRDF(data []byte) (*Channel, error) {
 func WriteFeedXML(feed *RssFeed, filename string) error {
 	// top level element. version is required. we use 2.0 even though we
 	// are generating 2.0.1 as that, it seems, is the spec.
-	rss := RSSXML{Version: "2.0"}
+	rss := RSSXML{
+		Version: "2.0",
+	}
+	rss.XMLName.Local = "rss"
 
 	// set up the channel metadata.
 	// <channel/>
