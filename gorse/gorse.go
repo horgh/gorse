@@ -39,37 +39,39 @@ type GorseConfig struct {
 	DbPass     string
 	DbName     string
 	DbHost     string
-	// XXX: we could determine this in javascript instead and convert
-	//   displayed times at that point.
-	DisplayTimeZone         string
+
+	// TODO: Auto detect timezone, or move this to a user setting
+	DisplayTimeZone string
+
 	UriPrefix               string
 	CookieAuthenticationKey string
 	SessionName             string
 }
 
-// global db connection.
-// this is so we try to share a single connection for multiple requests.
-// NOTE: according to the database/sql documentation, the DB type
+// Global db connection.
+// This is so we try to share a single connection for multiple requests.
+// NOTE: According to the database/sql documentation, the DB type
 //   is indeed safe for concurrent use by multiple goroutines.
 var Db *sql.DB
 
-// we need this struct as we must pass instances of it to fcgi.Serve.
-// this is because it must conform to the http.Handler interface.
+// We need this struct as we must pass instances of it to fcgi.Serve.
+// This is because it must conform to the http.Handler interface.
 type HttpHandler struct {
 	settings     *GorseConfig
 	sessionStore *sessions.CookieStore
 }
 
-// connectToDb opens a new connection to the database.
+// ConnectToDb opens a new connection to the database.
 func connectToDb(settings *GorseConfig) (*sql.DB, error) {
-	// connect to the database.
 	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s",
 		settings.DbUser, settings.DbPass, settings.DbName, settings.DbHost)
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		log.Print("Failed to connect to the database: " + err.Error())
 		return nil, err
 	}
+
 	log.Print("Opened new connection to the database.")
 	return db, nil
 }
@@ -78,26 +80,30 @@ func connectToDb(settings *GorseConfig) (*sql.DB, error) {
 // database connection.
 // we use the global Db variable to try to ensure we use a single connection.
 func getDb(settings *GorseConfig) (*sql.DB, error) {
-	// if we have a db connection, ensure that it is still available
-	// so that we reconnect if it is not.
+	// If we have a db connection, ensure that it is still available so that we
+	// reconnect if it is not.
 	if Db != nil {
 		err := Db.Ping()
-		if err != nil {
-			log.Printf("Database ping failed: %s", err.Error())
-			// continue on, but set us so that we attempt to reconnect.
-			Db.Close()
-			Db = nil
+		if err == nil {
+			return Db, nil
 		}
+
+		log.Printf("Database ping failed: %s", err.Error())
+
+		// Continue on, but set us so that we attempt to reconnect.
+		Db.Close()
+		Db = nil
 	}
-	// connect to the database if necessary.
-	if Db == nil {
-		db, err := connectToDb(settings)
-		if err != nil {
-			log.Printf("Failed to connect to the database: %s", err.Error())
-			return nil, err
-		}
-		Db = db
+
+	db, err := connectToDb(settings)
+	if err != nil {
+		log.Printf("Failed to connect to the database: %s", err.Error())
+		return nil, err
 	}
+
+	// Set global
+	Db = db
+
 	return Db, nil
 }
 
@@ -153,6 +159,7 @@ ORDER BY ri.publication_date ASC
 			log.Printf("Failed to scan row information: %s", err.Error())
 			return nil, err
 		}
+
 		// set time to the display timezone.
 		item.PublicationDate = item.PublicationDate.In(location)
 
@@ -168,7 +175,6 @@ ORDER BY ri.publication_date ASC
 			return nil, err
 		}
 
-		// add it to our slice.
 		items = append(items, item)
 	}
 
@@ -179,8 +185,7 @@ ORDER BY ri.publication_date ASC
 // body.
 func send500Error(rw http.ResponseWriter, message string) {
 	rw.WriteHeader(http.StatusInternalServerError)
-	// XXX: make this use a template.
-	rw.Write([]byte("<h1>" + message + "</h1>"))
+	rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
 }
 
 // getRowCssClass takes a row index and determines the css class to use.
@@ -198,6 +203,7 @@ func getRowCssClass(index int) string {
 func getHTMLDescription(text string) template.HTML {
 	// encode the entire string as HTML first.
 	html := template.HTMLEscapeString(text)
+
 	// wrap up URLs in <a>.
 	// I previously used this re: \b(https?://\S+)
 	// but there were issues with it recognising non-url characters. I even
@@ -271,7 +277,6 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 // it implements the type RequestHandlerFunc
 func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
-	// we need a database connection.
 	db, err := getDb(settings)
 	if err != nil {
 		log.Printf("Failed to get database connection: %s", err.Error())
@@ -279,7 +284,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// retrieve the feeds from the database. we want to be able to
+	// Retrieve the feeds from the database. we want to be able to
 	// list our feeds and show information such as when the last time
 	// we updated was.
 	feeds, err := gorselib.RetrieveFeeds(db)
@@ -289,13 +294,14 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// retrieve items from the database.
+	// Retrieve items from the database.
 	items, err := retrieveFeedItems(db, settings)
 	if err != nil {
 		log.Printf("Failed to retrieve items: %s", err.Error())
 		send500Error(rw, "Failed to retrieve items")
 		return
 	}
+
 	// TODO: move this to be calculated by a method?
 	//   may also be able to move some of the post processing on items
 	//   in retrieveFeedItems() into methods.
@@ -304,16 +310,19 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	for i, item := range items {
 		// format time.
 		items[i].PublicationDateString = item.PublicationDate.Format(time.RFC1123Z)
+
 		// ensure we say no title if there is no title.
 		// (so there is something to have in the link content)
 		if len(items[i].Title) == 0 {
 			items[i].Title = "<No title>"
 		}
+
 		// make HTML version of description. we set it as type HTML so the template
 		// execution knows not to re-encode it. we want to control the encoding
 		// more carefully for making links of URLs, for one.
 		items[i].DescriptionHTML = getHTMLDescription(items[i].Description)
 	}
+
 	// we may have messages to display.
 	// TODO: right now only success messages?
 	flashes := session.Flashes()
@@ -324,8 +333,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			successMessages = append(successMessages, str)
 		}
 	}
+
 	// TODO: error check Save()
 	session.Save(request, rw)
+
 	// show the page.
 	type ListItemsPage struct {
 		PageTitle       string
@@ -334,6 +345,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		SuccessMessages []string
 		Path            string
 	}
+
 	listItemsPage := ListItemsPage{
 		PageTitle:       "",
 		Items:           items,
@@ -341,6 +353,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		SuccessMessages: successMessages,
 		Path:            request.URL.Path,
 	}
+
 	err = renderPage(rw, "_list_items", listItemsPage)
 	if err != nil {
 		log.Printf("Failure rendering page: %s", err.Error())
@@ -364,13 +377,14 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		send500Error(rw, "Failed to parse request")
 		return
 	}
-	// we need a database connection.
+
 	db, err := getDb(settings)
 	if err != nil {
 		log.Printf("Failed to get database connection: %s", err.Error())
 		send500Error(rw, "Failed to connect to database")
 		return
 	}
+
 	// check if we have any items to mark as read. these are in
 	// the request key 'read_item'.
 	readItems, exists := request.PostForm["read_item"]
@@ -396,12 +410,17 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 			set_read_count++
 		}
 	}
+
 	log.Printf("Set %d item(s) read", set_read_count)
+
 	session.AddFlash("Updated read flags")
+
 	// TODO: error check Save()
 	session.Save(request, rw)
+
 	// TODO: should we get path from the config?
 	var uri = "/gorse/"
+
 	http.Redirect(rw, request, uri, http.StatusFound)
 }
 
@@ -414,7 +433,7 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	log.Printf("Serving static request [%s]", request.URL.Path)
 
 	// set the dir we serve.
-	// XXX: possibly we should get this from a config and use an absolute
+	// TODO: possibly we should get this from a config and use an absolute
 	//   path?
 	var staticDir = http.Dir("./static")
 
@@ -428,13 +447,14 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	strippedHandler.ServeHTTP(rw, request)
 }
 
-// serveHTTP handles an http request. it is invoked by the fastcgi
+// ServeHTTP handles an http request. it is invoked by the fastcgi
 // package in a goroutine.
 func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
 	request *http.Request) {
 	log.Printf("Serving new [%s] request from [%s] to path [%s]",
 		request.Method, request.RemoteAddr, request.URL.Path)
-	// get existing session, or make a new one.
+
+	// Get existing session, or make a new one.
 	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
 	if err != nil {
 		log.Printf("Session Get error: %s", err.Error())
@@ -442,45 +462,58 @@ func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
 		context.Clear(request)
 		return
 	}
-	// we need to decide how to parse this request. we do this by looking
+
+	// We need to decide how to parse this request. we do this by looking
 	// at the HTTP method and the path.
+
 	type RequestHandlerFunc func(http.ResponseWriter, *http.Request,
 		*GorseConfig, *sessions.Session)
+
 	type RequestHandler struct {
 		Method string
-		// regex patter on the path to match.
+
+		// Regex pattern on the path to match.
 		PathPattern string
-		// handler function.
+
 		Func RequestHandlerFunc
 	}
+
 	var handlers = []RequestHandler{
+		// GET /
 		RequestHandler{
 			Method:      "GET",
 			PathPattern: "^" + handler.settings.UriPrefix + "/?$",
 			Func:        handlerListItems,
 		},
+
+		// POST /update_read_flags
 		RequestHandler{
 			Method:      "POST",
 			PathPattern: "^" + handler.settings.UriPrefix + "/update_read_flags/?$",
 			Func:        handlerUpdateReadFlags,
 		},
+
+		// GET /static/*
 		RequestHandler{
 			Method:      "GET",
 			PathPattern: "^" + handler.settings.UriPrefix + "/static/",
 			Func:        handlerStaticFiles,
 		},
 	}
-	// find a matching handler.
+
+	// Find a matching handler.
 	for _, actionHandler := range handlers {
 		if actionHandler.Method != request.Method {
 			continue
 		}
+
 		matched, err := regexp.MatchString(actionHandler.PathPattern,
 			request.URL.Path)
 		if err != nil {
 			log.Printf("Error matching regex: %s", err.Error())
 			continue
 		}
+
 		if matched {
 			actionHandler.Func(rw, request, handler.settings, session)
 			// NOTE: we don't session.Save() here as if we redirect the Save()
@@ -491,10 +524,11 @@ func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
 			return
 		}
 	}
-	// there was no matching handler - send a 404.
+
+	// There was no matching handler - send a 404.
 	log.Printf("No handler for this request.")
 	rw.WriteHeader(http.StatusNotFound)
-	// XXX: should make this build the body in a template instead.
+	// TODO: We should make this build the body in a template instead.
 	rw.Write([]byte("<h1>404 Not Found</h1>"))
 	session.Save(request, rw)
 	context.Clear(request)
@@ -515,7 +549,6 @@ func main() {
 		"Path to directory containing assets: static and templates directories.")
 	flag.Parse()
 
-	// config file is required.
 	if len(*configPath) == 0 {
 		log.Print("You must specify a configuration file.")
 		flag.PrintDefaults()
@@ -569,10 +602,12 @@ func main() {
 		log.Print("Failed to open port: " + err.Error())
 		os.Exit(1)
 	}
+
 	var httpHandler = HttpHandler{
 		settings:     &settings,
 		sessionStore: sessionStore,
 	}
+
 	// TODO: this will serve requests forever - should we have a signal
 	//   or a method to cause this to gracefully stop?
 	log.Print("Starting to serve requests.")
