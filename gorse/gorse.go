@@ -61,6 +61,13 @@ type HttpHandler struct {
 	sessionStore *sessions.CookieStore
 }
 
+type sortOrder int
+
+const (
+	sortAscending sortOrder = iota
+	sortDescending
+)
+
 // ConnectToDb opens a new connection to the database.
 func connectToDb(settings *GorseConfig) (*sql.DB, error) {
 	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s",
@@ -125,8 +132,8 @@ WHERE id = $1
 
 // retrieveFeedItems retrieves feed items from the database which are
 // marked non-read.
-func retrieveFeedItems(db *sql.DB, settings *GorseConfig) ([]gorselib.RssItem,
-	error) {
+func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder) (
+	[]gorselib.RssItem, error) {
 	var query string = `
 SELECT
 rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
@@ -134,8 +141,13 @@ FROM rss_item ri
 LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 WHERE rf.active = true
 	AND ri.read = false
-ORDER BY ri.publication_date ASC
 `
+
+	if order == sortAscending {
+		query += "ORDER BY ri.publication_date ASC"
+	} else {
+		query += "ORDER BY ri.publication_date DESC"
+	}
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -294,8 +306,25 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
+	// We can be told different sort display order. This is in the URL.
+	requestValues := request.URL.Query()
+
+	// Default is date descending.
+	order := sortDescending
+	reverseSortOrder := "date-asc"
+
+	sortRaw := requestValues.Get("sort-order")
+	if sortRaw == "date-asc" {
+		order = sortAscending
+		reverseSortOrder = "date-desc"
+	}
+	if sortRaw == "date-desc" {
+		order = sortDescending
+		reverseSortOrder = "date-asc"
+	}
+
 	// Retrieve items from the database.
-	items, err := retrieveFeedItems(db, settings)
+	items, err := retrieveFeedItems(db, settings, order)
 	if err != nil {
 		log.Printf("Failed to retrieve items: %s", err.Error())
 		send500Error(rw, "Failed to retrieve items")
@@ -337,21 +366,24 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// TODO: error check Save()
 	session.Save(request, rw)
 
-	// show the page.
+	// Show the page.
+
 	type ListItemsPage struct {
-		PageTitle       string
-		Items           []gorselib.RssItem
-		Feeds           []gorselib.RssFeed
-		SuccessMessages []string
-		Path            string
+		PageTitle        string
+		Items            []gorselib.RssItem
+		Feeds            []gorselib.RssFeed
+		SuccessMessages  []string
+		Path             string
+		ReverseSortOrder string
 	}
 
 	listItemsPage := ListItemsPage{
-		PageTitle:       "",
-		Items:           items,
-		Feeds:           feeds,
-		SuccessMessages: successMessages,
-		Path:            request.URL.Path,
+		PageTitle:        "",
+		Items:            items,
+		Feeds:            feeds,
+		SuccessMessages:  successMessages,
+		Path:             request.URL.Path,
+		ReverseSortOrder: reverseSortOrder,
 	}
 
 	err = renderPage(rw, "_list_items", listItemsPage)

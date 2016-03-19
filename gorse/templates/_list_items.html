@@ -12,6 +12,7 @@
 	Feeds
 	<a href="#" class="expand_feeds"></a>
 </h2>
+
 <ul id="feeds">
 	{{range $index, $element := .Feeds}}
 		<li>
@@ -31,7 +32,11 @@
 	{{end}}
 </ul>
 
-<p>Showing {{len .Items}} feed items.</p>
+<p>
+Showing {{len .Items}} feed items.
+{{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc">Sort ascending</a>{{end}}
+{{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc">Sort descending</a>{{end}}
+</p>
 
 <form action="{{.Path}}update_read_flags"
 	method="POST"
