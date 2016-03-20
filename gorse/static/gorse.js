@@ -19,20 +19,16 @@ Gorse.log = function(msg) {
 };
 
 Gorse.toggle_read = function(item_li) {
-	Gorse.log("called");
-
 	if ($(item_li).hasClass('clicked')) {
-		Gorse.log("has clicked");
-
 		$(item_li).removeClass('clicked');
 
 		// remove the input indicating it is clicked.
 		$('input.read_item', item_li).remove();
 
+		Gorse.update_counts();
+
 		return;
 	}
-
-	Gorse.log("has not clicked");
 
 	$(item_li).addClass('clicked');
 
@@ -43,7 +39,20 @@ Gorse.toggle_read = function(item_li) {
 		'class': 'read_item',
 		'value': $('.item_id', item_li).val()
 	});
+
 	$(item_li).append(read_ele);
+
+	Gorse.update_counts();
+};
+
+// Determine how many items we have selected. Update a displayed counter.
+Gorse.update_counts = function() {
+	// Count how many we have selected.
+	var count = $('input.read_item').length;
+
+	// Display the counter in the save button.
+	var label = 'Save (' + count + ')';
+	$('button#update-flags-top').text(label);
 };
 
 $(document).ready(function() {
@@ -56,6 +65,7 @@ $(document).ready(function() {
 		});
 	});
 
+	// And to the checkmark
   $('a.check-it').each(function() {
 		$(this).click(function() {
 			var item_li = $(this).closest('li');
