@@ -66,7 +66,7 @@ $(document).ready(function() {
 	});
 
 	// And to the checkmark
-  $('a.check-it').each(function() {
+	$('a.check-it').each(function() {
 		$(this).click(function() {
 			var item_li = $(this).closest('li');
 			Gorse.toggle_read(item_li);
