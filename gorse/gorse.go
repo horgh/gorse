@@ -70,7 +70,7 @@ const (
 
 // ConnectToDb opens a new connection to the database.
 func connectToDb(settings *GorseConfig) (*sql.DB, error) {
-	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s",
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
 		settings.DbUser, settings.DbPass, settings.DbName, settings.DbHost)
 
 	db, err := sql.Open("postgres", dsn)

@@ -46,30 +46,38 @@ type GorsePollConfig struct {
 
 // retrieveFeed fetches the raw feed content.
 func retrieveFeed(feed *gorselib.RssFeed) ([]byte, error) {
-	// retrieve the feed via an HTTP call.
-	// NOTE: we set up a http.Transport to use TLS settings (we do not want
+	// Retrieve the feed via an HTTP call.
+
+	// NOTE: We set up a http.Transport to use TLS settings (we do not want
 	//   to check certificates because my site does not have a valid one
 	//   right now), and then set the transport on the http.Client, and then
 	//   make the request.
-	//   we have to do it in this round about way rather than simply
+	//
+	//   We have to do it in this round about way rather than simply
 	//   http.Get() or the like in order to pass through the TLS setting it
 	//   appears.
+	//
+	//   TODO: Enable verification...
+
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
+
 	httpTransport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
+
 	httpClient := &http.Client{
 		Transport: httpTransport,
+		Timeout:   time.Second * 10,
 	}
+
 	httpResponse, err := httpClient.Get(feed.Uri)
-	// NOTE: we need to ensure that the response body gets closed.
-	//   we could use 'defer' to do this, but it appears that the xml
-	//   Decode function may close this for us?
+
 	if err != nil {
-		log.Print("Failed to update feed: " + feed.Name)
-		// it appears we do not need to call Body.Close() here - if we try
+		log.Printf("HTTP request for feed failed. (%s): %s", feed.Name, err.Error())
+
+		// It appears we do not need to call Body.Close() here - if we try
 		// then we get a runtime error about nil pointer dereference.
 		return nil, err
 	}
@@ -327,7 +335,7 @@ func main() {
 	log.SetFlags(log.Ltime)
 
 	// connect to the database.
-	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s",
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
 		settings.DbUser, settings.DbPass, settings.DbName, settings.DbHost)
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
