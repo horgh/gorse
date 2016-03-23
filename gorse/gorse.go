@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/fcgi"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -314,13 +315,13 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	reverseSortOrder := "date-asc"
 
 	sortRaw := requestValues.Get("sort-order")
+	if sortRaw == "" || sortRaw == "date-desc" {
+		order = sortDescending
+		reverseSortOrder = "date-asc"
+	}
 	if sortRaw == "date-asc" {
 		order = sortAscending
 		reverseSortOrder = "date-desc"
-	}
-	if sortRaw == "date-desc" {
-		order = sortDescending
-		reverseSortOrder = "date-asc"
 	}
 
 	// Retrieve items from the database.
@@ -374,6 +375,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Feeds            []gorselib.RssFeed
 		SuccessMessages  []string
 		Path             string
+		SortOrder        string
 		ReverseSortOrder string
 	}
 
@@ -383,6 +385,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Feeds:            feeds,
 		SuccessMessages:  successMessages,
 		Path:             request.URL.Path,
+		SortOrder:        sortRaw,
 		ReverseSortOrder: reverseSortOrder,
 	}
 
@@ -425,7 +428,6 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		// this is associated with a slice of strings. each of these
 		// is an id we want to mark as read now.
 		for _, idStr := range readItems {
-			// we need to turn the id into an integer.
 			var id int64
 			id, err = strconv.ParseInt(idStr, 10, 64)
 			if err != nil {
@@ -434,11 +436,13 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				send500Error(rw, "Invalid id")
 				return
 			}
-			// set it read.
+
 			err = setItemRead(db, id)
 			if err != nil {
+				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
 			}
+
 			set_read_count++
 		}
 	}
@@ -451,7 +455,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	session.Save(request, rw)
 
 	// TODO: should we get path from the config?
-	var uri = "/gorse/"
+	var uri = "/gorse/?sort-order=" +
+		url.QueryEscape(request.PostForm.Get("sort-order"))
 
 	http.Redirect(rw, request, uri, http.StatusFound)
 }

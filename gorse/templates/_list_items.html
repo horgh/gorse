@@ -43,6 +43,7 @@ Showing {{len .Items}} feed items.
 	autocomplete="off"
 	id="list-items-form"
 	>
+	<input type="hidden" name="sort-order" value="{{.SortOrder}}">
 
 	<ul id="items">
 		{{range $index, $element := .Items}}
