@@ -21,6 +21,7 @@ import (
 	_ "github.com/lib/pq"
 	"html/template"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"net/http/fcgi"
@@ -68,6 +69,8 @@ const (
 	sortAscending sortOrder = iota
 	sortDescending
 )
+
+const pageSize = 50
 
 // ConnectToDb opens a new connection to the database.
 func connectToDb(settings *GorseConfig) (*sql.DB, error) {
@@ -131,10 +134,45 @@ WHERE id = $1
 	return nil
 }
 
+// countTotalItems retrieves a count of unread feed items.
+//
+// This is for pagination.
+func countTotalItems(db *sql.DB) (int, error) {
+	query := `
+SELECT COUNT(1) AS count
+FROM rss_item ri
+LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+WHERE rf.active = true
+	AND ri.read = false
+`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return -1, err
+	}
+
+	if !rows.Next() {
+		return -1, errors.New("Count not found")
+	}
+
+	var count int
+	err = rows.Scan(&count)
+	if err != nil {
+		return -1, err
+	}
+
+	return count, nil
+}
+
 // retrieveFeedItems retrieves feed items from the database which are
 // marked non-read.
-func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder) (
-	[]gorselib.RssItem, error) {
+func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
+	page int) ([]gorselib.RssItem, error) {
+
+	if page < 1 {
+		return nil, errors.New("Invalid page number.")
+	}
+
 	var query string = `
 SELECT
 rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
@@ -150,7 +188,11 @@ WHERE rf.active = true
 		query += "ORDER BY ri.publication_date DESC"
 	}
 
-	rows, err := db.Query(query)
+	query += " LIMIT $1 OFFSET $2"
+
+	offset := (page - 1) * pageSize
+
+	rows, err := db.Query(query, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -324,8 +366,17 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		reverseSortOrder = "date-desc"
 	}
 
+	page := 1
+	pageParam := requestValues.Get("page")
+	if pageParam != "" {
+		page, err = strconv.Atoi(pageParam)
+		if err != nil {
+			page = 1
+		}
+	}
+
 	// Retrieve items from the database.
-	items, err := retrieveFeedItems(db, settings, order)
+	items, err := retrieveFeedItems(db, settings, order, page)
 	if err != nil {
 		log.Printf("Failed to retrieve items: %s", err.Error())
 		send500Error(rw, "Failed to retrieve items")
@@ -353,8 +404,23 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		items[i].DescriptionHTML = getHTMLDescription(items[i].Description)
 	}
 
-	// we may have messages to display.
-	// TODO: right now only success messages?
+	// Get count of total feed items (all pages).
+	totalItems, err := countTotalItems(db)
+	if err != nil {
+		log.Printf(err.Error())
+		send500Error(rw, "Failed to lookup count.")
+		return
+	}
+
+	totalPages := int(math.Ceil(float64(totalItems) / float64(pageSize)))
+	nextPage := -1
+	if page < totalPages {
+		nextPage = page + 1
+	}
+	prevPage := page - 1
+
+	// We may have messages to display.
+	// TODO: Right now only success messages
 	flashes := session.Flashes()
 	var successMessages []string
 	for _, flash := range flashes {
@@ -364,7 +430,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		}
 	}
 
-	// TODO: error check Save()
+	// TODO: Error check Save()
 	session.Save(request, rw)
 
 	// Show the page.
@@ -377,6 +443,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Path             string
 		SortOrder        string
 		ReverseSortOrder string
+		TotalItems       int
+		Page             int
+		NextPage         int
+		PreviousPage     int
 	}
 
 	listItemsPage := ListItemsPage{
@@ -387,6 +457,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Path:             request.URL.Path,
 		SortOrder:        sortRaw,
 		ReverseSortOrder: reverseSortOrder,
+		TotalItems:       totalItems,
+		Page:             page,
+		NextPage:         nextPage,
+		PreviousPage:     prevPage,
 	}
 
 	err = renderPage(rw, "_list_items", listItemsPage)

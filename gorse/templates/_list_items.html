@@ -33,7 +33,7 @@
 </ul>
 
 <p>
-Showing {{len .Items}} feed items.
+Showing {{len .Items}}/{{.TotalItems}} feed items.
 {{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc">Sort ascending</a>{{end}}
 {{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc">Sort descending</a>{{end}}
 </p>
@@ -72,3 +72,6 @@ Showing {{len .Items}} feed items.
 		{{end}}
 	</ul>
 </form>
+
+{{if gt .Page 1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.PreviousPage}}">Previous page</a> {{end}}
+{{if ne .NextPage -1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.NextPage}}">Next page</a>{{end}}
