@@ -72,7 +72,7 @@ const (
 
 const pageSize = 50
 
-// ConnectToDb opens a new connection to the database.
+// connectToDb opens a new connection to the database.
 func connectToDb(settings *GorseConfig) (*sql.DB, error) {
 	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
 		settings.DbUser, settings.DbPass, settings.DbName, settings.DbHost)
@@ -113,6 +113,7 @@ func getDb(settings *GorseConfig) (*sql.DB, error) {
 	}
 
 	// Set global
+	// TODO: Race?
 	Db = db
 
 	return Db, nil
@@ -158,8 +159,10 @@ WHERE rf.active = true
 	var count int
 	err = rows.Scan(&count)
 	if err != nil {
+		rows.Close()
 		return -1, err
 	}
+	rows.Close()
 
 	return count, nil
 }
