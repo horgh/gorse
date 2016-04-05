@@ -71,6 +71,8 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 			</li>
 		{{end}}
 	</ul>
+
+	<button>Save</button>
 </form>
 
 {{if gt .Page 1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.PreviousPage}}">Previous page</a> {{end}}
