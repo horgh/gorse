@@ -136,11 +136,7 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 
 // setItemRead sets the given item read in the database.
 func setItemRead(db *sql.DB, id int64) error {
-	query := `
-UPDATE rss_item
-SET read = true
-WHERE id = $1
-`
+	query := `UPDATE rss_item SET read = true WHERE id = $1`
 	_, err := db.Exec(query, id)
 	if err != nil {
 		log.Printf("Failed to set item id [%d] read: %s", id, err)
