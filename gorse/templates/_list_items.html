@@ -50,9 +50,9 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 			{{$rowClass := getRowCSSClass $index}}
 			<li class="{{$rowClass}}">
 				<h1>
-					<a href="#" class="check-it" data-id="{{.Id}}">✓</a>
+					<a href="#" class="check-it" data-id="{{.ID}}">✓</a>
 					{{.FeedName}}
-					<a href="{{.Uri}}">{{.Title}}</a>
+					<a href="{{.URI}}">{{.Title}}</a>
 					<span class="date">
 						({{.PublicationDateString}})
 					</span>
@@ -63,7 +63,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 				<input type="hidden"
 					class="item_id"
 					name="item_id"
-					value="{{.Id}}"
+					value="{{.ID}}"
 					>
 			</li>
 		{{else}}
