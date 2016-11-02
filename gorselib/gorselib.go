@@ -1,24 +1,15 @@
-/*
- * 2013-07-01
- * will@summercat.com
- *
- * gorselib provides helper function for interacting with RSS feeds.
- * primarily this surrounds building and reading/parsing.
- */
-
+//
+// Package gorselib provides helper function for interacting with RSS feeds.
+// primarily this surrounds building and reading/parsing.
+//
 package gorselib
 
 import (
-	// bytes: for charset conversion
 	"bytes"
-	// go-charset: for charset conversion
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"database/sql"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	_ "github.com/lib/pq"
 	"html"
 	"html/template"
 	"io/ioutil"
@@ -26,24 +17,28 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"code.google.com/p/go-charset/charset"
+	// go-charset: for charset conversion
+	_ "code.google.com/p/go-charset/data"
 )
 
-// package settings.
-type GorseLibConfig struct {
+// Config controls package wide settings.
+type Config struct {
 	// control whether we have verbose output (or not)
 	Quiet bool
 }
 
 // use a global default set of settings.
 // see package log for a similar approach (global default settings)
-var config = GorseLibConfig{
+var config = Config{
 	Quiet: false,
 }
 
-// describe an overall feed.
-type RssFeed struct {
+// RSSFeed describes a feed.
+type RSSFeed struct {
 	// database id of the feed.
-	Id int64
+	ID int64
 
 	// name of the feed.
 	Name string
@@ -52,7 +47,7 @@ type RssFeed struct {
 	Description string
 
 	// uri to the feed.
-	Uri string
+	URI string
 
 	// update frequency in seconds.
 	UpdateFrequencySeconds int64
@@ -60,37 +55,36 @@ type RssFeed struct {
 	// last time we updated.
 	LastUpdateTime time.Time
 
-	Items []RssItem
+	Items []RSSItem
 }
 
-// describe an item in the feed.
-type RssItem struct {
+// RSSItem describes an item in a feed.
+type RSSItem struct {
 	FeedName    string
-	Id          int64
+	ID          int64
 	Title       string
 	Description string
 	// HTML version of description.
 	// TODO this is only used in gorse...
 	DescriptionHTML       template.HTML
-	Uri                   string
+	URI                   string
 	PublicationDate       time.Time
 	PublicationDateString string
 }
 
-// abstracted from ItemXML and RDFItemXML.
-// why? because I will convert ItemXML and RDFItemXML both
-// into this form.
+// Item is abstracted from ItemXML and RDFItemXML.
+// Why? Because I will convert ItemXML and RDFItemXML both into this form.
 type Item struct {
 	Title       string
 	Link        string
 	Description string
 	PubDate     string
-	Guid        string
+	GUID        string
 }
 
-// abstracted from ChannelXML
-// why? because I will convert ItemXML and RDFItemXML both
-// into Item and need to then store it here.
+// Channel is abstracted from ChannelXML.
+// Why? Because I will convert ItemXML and RDFItemXML both into Item and need
+// to then store it here.
 type Channel struct {
 	Title         string
 	Link          string
@@ -100,18 +94,19 @@ type Channel struct {
 	Items         []Item
 }
 
-// these *XML structs are for parsing the XML - we fill them up
-// with data we parse out. however, they are also specially set up
-// for the xml.Unmarshal() function (i.e., the tags on each field)
+// ItemXML and the other *XML structs are for parsing the XML. We fill them up
+// with data we parse out. However, they are also specially set up for the
+// xml.Unmarshal() function (i.e., the tags on each field)
 type ItemXML struct {
 	XMLName     xml.Name `xml:"item"`
 	Title       string   `xml:"title"`
 	Link        string   `xml:"link"`
 	Description string   `xml:"description"`
 	PubDate     string   `xml:"pubDate"`
-	Guid        string   `xml:"guid"`
+	GUID        string   `xml:"guid"`
 }
 
+// ChannelXML is used for parsing XML.
 type ChannelXML struct {
 	XMLName       xml.Name  `xml:"channel"`
 	Title         string    `xml:"title"`
@@ -122,7 +117,7 @@ type ChannelXML struct {
 	Items         []ItemXML `xml:"item"`
 }
 
-// <rdf> item
+// RDFItemXML is used for parsing <rdf> item XML.
 type RDFItemXML struct {
 	XMLName     xml.Name `xml:"item"`
 	Title       string   `xml:"title"`
@@ -130,9 +125,10 @@ type RDFItemXML struct {
 	Description string   `xml:"description"`
 	PubDate     string   `xml:"date"`
 	// TODO: we don't need Guid? rdf does not have it
-	Guid string `xml:"guid"`
+	GUID string `xml:"guid"`
 }
 
+// RSSXML is used for parsing RSS XML.
 type RSSXML struct {
 	// If xml.Name is specified and has a tag name, we must have this element as
 	// the root. I don't do this though because it is case sensitive. Instead,
@@ -142,6 +138,7 @@ type RSSXML struct {
 	Version string     `xml:"version,attr"`
 }
 
+// RDFXML is used for parsing RDF XML.
 type RDFXML struct {
 	XMLName xml.Name
 	Channel ChannelXML `xml:"channel"`
@@ -345,7 +342,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
-				Guid:        item.Guid,
+				GUID:        item.GUID,
 			})
 	}
 
@@ -392,14 +389,14 @@ func parseAsRDF(data []byte) (*Channel, error) {
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
-				Guid:        item.Guid,
+				GUID:        item.GUID,
 			})
 	}
 
 	return &channel, nil
 }
 
-// WriteFeedXML takes an RssFeed and generates and writes an XML file.
+// WriteFeedXML takes an RSSFeed and generates and writes an XML file.
 // this generates RSS 2.0.1.
 // see http://www.rssboard.org/rss-specification
 // validate the output files using:
@@ -410,7 +407,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 // NOTE: a note on timestamps. the rss spec says we should use
 //   RFC 822, but the time.RFC1123Z format looks closest to their
 //   examples, so I use that.
-func WriteFeedXML(feed *RssFeed, filename string) error {
+func WriteFeedXML(feed *RSSFeed, filename string) error {
 	// top level element. version is required. we use 2.0 even though we
 	// are generating 2.0.1 as that, it seems, is the spec.
 	rss := RSSXML{
@@ -427,7 +424,7 @@ func WriteFeedXML(feed *RssFeed, filename string) error {
 	//   <pubDate/> Publication date for the content
 	//   <lastBuildDate/> Last time content of channel changed
 	rss.Channel.Title = feed.Name
-	rss.Channel.Link = feed.Uri
+	rss.Channel.Link = feed.URI
 	rss.Channel.Description = feed.Description
 	// XXX: technically these dates maybe should be different...
 	rss.Channel.PubDate = feed.LastUpdateTime.Format(time.RFC1123Z)
@@ -443,13 +440,13 @@ func WriteFeedXML(feed *RssFeed, filename string) error {
 	for _, item := range feed.Items {
 		itemXML := ItemXML{
 			Title:       item.Title,
-			Link:        item.Uri,
+			Link:        item.URI,
 			Description: item.Description,
 			PubDate:     item.PublicationDate.Format(time.RFC1123Z),
-			// use the Uri as guid - it should be uniquely identifying
+			// use the URI as guid - it should be uniquely identifying
 			// the post after all. NOTE: the guid has no required format
 			// other than it is intended to be unique.
-			Guid: item.Uri,
+			GUID: item.URI,
 		}
 		rss.Channel.Items = append(rss.Channel.Items, itemXML)
 	}
@@ -462,7 +459,7 @@ func WriteFeedXML(feed *RssFeed, filename string) error {
 	}
 
 	// add the xml header <?xml .. ?>
-	var xmlHeader []byte = []byte(xml.Header)
+	xmlHeader := []byte(xml.Header)
 	var xmlDoc []byte
 	for _, v := range xmlHeader {
 		xmlDoc = append(xmlDoc, v)
@@ -484,8 +481,8 @@ func WriteFeedXML(feed *RssFeed, filename string) error {
 	return nil
 }
 
-// retrieveFeeds finds rss feeds from the database.
-func RetrieveFeeds(db *sql.DB) ([]RssFeed, error) {
+// RetrieveFeeds finds rss feeds from the database.
+func RetrieveFeeds(db *sql.DB) ([]RSSFeed, error) {
 	// retrieve the feeds from the database.
 	query := `
 SELECT
@@ -496,11 +493,11 @@ ORDER BY name
 `
 	rows, err := db.Query(query)
 	if err != nil {
-		log.Print("Failed to query for feeds from the database: " + err.Error())
+		log.Printf("Failed to query for feeds from the database: %s", err)
 		return nil, err
 	}
 	// build our slice of feeds.
-	var feeds []RssFeed
+	var feeds []RSSFeed
 	for rows.Next() {
 		var id int64
 		var name string
@@ -510,14 +507,14 @@ ORDER BY name
 		err := rows.Scan(&id, &name, &uri, &updateFrequencySeconds,
 			&lastUpdateTime)
 		if err != nil {
-			log.Print("Failed to retrieve row data: " + err.Error())
-			rows.Close()
+			log.Printf("Failed to retrieve row data: %s", err)
+			_ = rows.Close()
 			return nil, err
 		}
-		var feed = RssFeed{
-			Id:   id,
+		var feed = RSSFeed{
+			ID:   id,
 			Name: name,
-			Uri:  uri,
+			URI:  uri,
 			UpdateFrequencySeconds: updateFrequencySeconds,
 			LastUpdateTime:         lastUpdateTime,
 		}
@@ -529,7 +526,7 @@ ORDER BY name
 // GetDurationUntilNextUpdateForDisplay builds a string describing how
 // long until the next update.
 // for example, '2 hours'
-func (feed RssFeed) GetDurationUntilNextUpdateForDisplay() (string, error) {
+func (feed RSSFeed) GetDurationUntilNextUpdateForDisplay() (string, error) {
 	// we want to know how long since our last update as we will compare
 	// this with how long our update frequency is.
 	timeSinceLastUpdate := time.Now().Sub(feed.LastUpdateTime)
@@ -564,7 +561,7 @@ func (feed RssFeed) GetDurationUntilNextUpdateForDisplay() (string, error) {
 // GetDurationSinceUpdateForDisplay builds a string describing how long ago
 // the last update was.
 // for example, '2 hours'.
-func (feed RssFeed) GetDurationSinceUpdateForDisplay() string {
+func (feed RSSFeed) GetDurationSinceUpdateForDisplay() string {
 	// now - last update time.
 	difference := time.Now().Sub(feed.LastUpdateTime)
 
@@ -585,7 +582,7 @@ func (feed RssFeed) GetDurationSinceUpdateForDisplay() string {
 
 // GetUpdateFrequencyForDisplay builds a string suitable for the user
 // out of our update frequency seconds.
-func (feed RssFeed) GetUpdateFrequencyForDisplay() string {
+func (feed RSSFeed) GetUpdateFrequencyForDisplay() string {
 	updateMinutes := feed.UpdateFrequencySeconds / 60
 	updateHours := updateMinutes / 60
 

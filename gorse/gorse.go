@@ -175,7 +175,7 @@ WHERE rf.active = true
 // retrieveFeedItems retrieves feed items from the database which are
 // marked non-read.
 func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
-	page int) ([]gorselib.RssItem, error) {
+	page int) ([]gorselib.RSSItem, error) {
 
 	if page < 1 {
 		return nil, errors.New("Invalid page number.")
@@ -213,10 +213,10 @@ WHERE rf.active = true
 		return nil, err
 	}
 
-	var items []gorselib.RssItem
+	var items []gorselib.RSSItem
 	for rows.Next() {
-		var item gorselib.RssItem
-		err := rows.Scan(&item.FeedName, &item.Id, &item.Title, &item.Uri,
+		var item gorselib.RSSItem
+		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.URI,
 			&item.Description, &item.PublicationDate)
 		if err != nil {
 			log.Printf("Failed to scan row information: %s", err.Error())
@@ -449,8 +449,8 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 
 	type ListItemsPage struct {
 		PageTitle        string
-		Items            []gorselib.RssItem
-		Feeds            []gorselib.RssFeed
+		Items            []gorselib.RSSItem
+		Feeds            []gorselib.RSSFeed
 		SuccessMessages  []string
 		Path             string
 		SortOrder        string

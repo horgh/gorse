@@ -26,14 +26,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	_ "github.com/lib/pq"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
+
+	_ "github.com/lib/pq"
 	"summercat.com/config"
 	"summercat.com/gorse/gorselib"
-	"time"
 )
 
 type GorsePollConfig struct {
@@ -103,7 +104,7 @@ FROM rss_item
 WHERE rss_feed_id = $1
 	AND link = $2
 `
-	rows, err := db.Query(query, feed.Id, item.Link)
+	rows, err := db.Query(query, feed.ID, item.Link)
 	if err != nil {
 		log.Printf("Failed to check if item title [%s] exists for feed [%s]: %s",
 			item.Title, feed.Name, err.Error())
@@ -160,7 +161,7 @@ VALUES($1, $2, $3, $4, $5)
 	//   I am dropping here is of type Result which tells us such
 	//   information.
 	_, err = db.Exec(query, item.Title, item.Description,
-		item.Link, pubDateDb, feed.Id)
+		item.Link, pubDateDb, feed.ID)
 	if err != nil {
 		log.Printf("Failed to add item with title [%s]: %s",
 			item.Title, err.Error())
@@ -231,10 +232,10 @@ UPDATE rss_feed
 SET last_update_time = NOW()
 WHERE id = $1
 `
-	_, err := db.Exec(query, feed.Id)
+	_, err := db.Exec(query, feed.ID)
 	if err != nil {
 		log.Printf("Failed to record feed update for feed id [%d] name [%s]: %s",
-			feed.Id, feed.Name, err.Error())
+			feed.ID, feed.Name, err)
 		return err
 	}
 	feed.LastUpdateTime = time.Now()
