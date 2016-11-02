@@ -191,9 +191,9 @@ WHERE rf.active = true
 `
 
 	if order == sortAscending {
-		query += "ORDER BY ri.publication_date ASC"
+		query += "ORDER BY ri.publication_date ASC, rf.name, ri.title"
 	} else {
-		query += "ORDER BY ri.publication_date DESC"
+		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
 	}
 
 	query += " LIMIT $1 OFFSET $2"
@@ -663,12 +663,12 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 
-	configPath := flag.String("config-file", "",
+	configPath := flag.String("config", "",
 		"Path to a configuration file.")
 	logPath := flag.String("log-file", "",
 		"Path to a log file.")
 	wwwPath := flag.String("www-path", "",
-		"Path to directory containing assets: static and templates directories.")
+		"Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
 	flag.Parse()
 
 	if len(*configPath) == 0 {

@@ -18,7 +18,7 @@ DESC="gorse fcgi server"
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 
-DAEMON_OPTS="-config-file /etc/gorse.conf -log-file /var/log/gorse.log -www-path /usr/share/gorse/www"
+DAEMON_OPTS="-config /etc/gorse.conf -log-file /var/log/gorse.log -www-path /usr/share/gorse/www"
 
 test -x $DAEMON || exit 0
 
