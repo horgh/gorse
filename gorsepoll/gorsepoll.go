@@ -150,9 +150,6 @@ INSERT INTO rss_item
 (title, description, link, publication_date, rss_feed_id)
 VALUES($1, $2, $3, $4, $5)
 `
-	// TODO: we could check if a single row was affected. the variable
-	//   I am dropping here is of type Result which tells us such
-	//   information.
 	_, err = db.Exec(query, item.Title, item.Description,
 		item.Link, pubDateDb, feed.ID)
 	if err != nil {

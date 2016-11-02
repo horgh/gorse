@@ -124,7 +124,7 @@ type RDFItemXML struct {
 	Link        string   `xml:"link"`
 	Description string   `xml:"description"`
 	PubDate     string   `xml:"date"`
-	// TODO: we don't need Guid? rdf does not have it
+	// TODO: We don't need GUID? rdf does not have it
 	GUID string `xml:"guid"`
 }
 
@@ -333,7 +333,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 		log.Printf("Parsed channel as RSS [%s]", channel.Title)
 	}
 
-	// TODO: Should we report if there are no items at all as an error?
+	// Should we report if there are no items at all as an error?
 
 	for _, item := range rssXML.Channel.Items {
 		channel.Items = append(channel.Items,

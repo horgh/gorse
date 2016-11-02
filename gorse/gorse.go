@@ -404,11 +404,8 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// TODO: move this to be calculated by a method?
-	//   may also be able to move some of the post processing on items
-	//   in retrieveFeedItems() into methods.
-	// set up additional information about each item.
-	// specifically we want to set a string timestamp.
+	// Set up additional information about each item.
+	// Specifically we want to set a string timestamp.
 	for i, item := range items {
 		// format time.
 		items[i].PublicationDateString = item.PublicationDate.Format(time.RFC1123Z)
