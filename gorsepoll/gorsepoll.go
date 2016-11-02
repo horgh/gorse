@@ -68,7 +68,7 @@ func retrieveFeed(feed *gorselib.RSSFeed) ([]byte, error) {
 	httpResponse, err := httpClient.Get(feed.URI)
 
 	if err != nil {
-		log.Printf("HTTP request for feed failed. (%s): %s", feed.Name, err.Error())
+		log.Printf("HTTP request for feed failed. (%s): %s", feed.Name, err)
 
 		// It appears we do not need to call Body.Close() here - if we try
 		// then we get a runtime error about nil pointer dereference.
@@ -81,7 +81,7 @@ func retrieveFeed(feed *gorselib.RSSFeed) ([]byte, error) {
 	// fetch function does not need to worry about anything to do with xml.
 	body, err := ioutil.ReadAll(httpResponse.Body)
 	if err != nil {
-		log.Print("Failed to read all: " + err.Error())
+		log.Printf("Failed to read all: %s", err)
 		return nil, err
 	}
 	return body, nil
@@ -100,7 +100,7 @@ WHERE rss_feed_id = $1
 	rows, err := db.Query(query, feed.ID, item.Link)
 	if err != nil {
 		log.Printf("Failed to check if item title [%s] exists for feed [%s]: %s",
-			item.Title, feed.Name, err.Error())
+			item.Title, feed.Name, err)
 		return false, err
 	}
 
@@ -137,7 +137,7 @@ func recordFeedItem(config *Config, db *sql.DB, feed *gorselib.RSSFeed,
 	exists, err := feedItemExists(db, feed, item)
 	if err != nil {
 		log.Printf("Failed to check if feed item title [%s] exists: %s",
-			item.Title, err.Error())
+			item.Title, err)
 		return false, err
 	}
 	if exists {
@@ -156,8 +156,7 @@ VALUES($1, $2, $3, $4, $5)
 	_, err = db.Exec(query, item.Title, item.Description,
 		item.Link, pubDateDb, feed.ID)
 	if err != nil {
-		log.Printf("Failed to add item with title [%s]: %s",
-			item.Title, err.Error())
+		log.Printf("Failed to add item with title [%s]: %s", item.Title, err)
 		return false, err
 	}
 	if config.Quiet == 0 {
@@ -175,14 +174,14 @@ func updateFeed(config *Config, db *sql.DB, feed *gorselib.RSSFeed) error {
 	// retrieve the feed body.
 	xmlData, err := retrieveFeed(feed)
 	if err != nil {
-		log.Print("Failed to retrieve feed: " + err.Error())
+		log.Printf("Failed to retrieve feed: %s", err)
 		return err
 	}
 
 	// parse the XML response.
 	channel, err := gorselib.ParseFeedXML(xmlData)
 	if err != nil {
-		return fmt.Errorf("Failed to parse XML of feed: %v", err.Error())
+		return fmt.Errorf("Failed to parse XML of feed: %s", err)
 	}
 
 	// record information about each item we parsed.
@@ -195,7 +194,7 @@ func updateFeed(config *Config, db *sql.DB, feed *gorselib.RSSFeed) error {
 		recorded, err := recordFeedItem(config, db, feed, &item)
 		if err != nil {
 			log.Printf("Failed to record feed item title [%s] for feed [%s]: %s",
-				item.Title, feed.Name, err.Error())
+				item.Title, feed.Name, err)
 			return err
 		}
 		if recorded {
@@ -272,7 +271,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []gorselib.RSSFeed,
 
 		err := updateFeed(config, db, &feed)
 		if err != nil {
-			log.Print("Failed to update feed: " + feed.Name + ": " + err.Error())
+			log.Printf("Failed to update feed: %s: %s", feed.Name, err)
 			continue
 		}
 
@@ -286,8 +285,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []gorselib.RSSFeed,
 		// network is down.
 		err = recordFeedUpdate(db, &feed)
 		if err != nil {
-			log.Printf("Failed to record update on feed [%s]: %s", feed.Name,
-				err.Error())
+			log.Printf("Failed to record update on feed [%s]: %s", feed.Name, err)
 			return err
 		}
 
@@ -320,7 +318,7 @@ func main() {
 	var settings Config
 	err := config.GetConfig(*configPath, &settings)
 	if err != nil {
-		log.Fatalf("Failed to retrieve config: %s", err.Error())
+		log.Fatalf("Failed to retrieve config: %s", err)
 	}
 
 	// set up the standard logger. we want to set flags to make it give

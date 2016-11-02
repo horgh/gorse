@@ -84,7 +84,7 @@ func connectToDB(settings *GorseConfig) (*sql.DB, error) {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Print("Failed to connect to the database: " + err.Error())
+		log.Printf("Failed to connect to the database: %s", err)
 		return nil, err
 	}
 
@@ -143,7 +143,7 @@ WHERE id = $1
 `
 	_, err := db.Exec(query, id)
 	if err != nil {
-		log.Printf("Failed to set item id [%d] read: %s", id, err.Error())
+		log.Printf("Failed to set item id [%d] read: %s", id, err)
 		return err
 	}
 	log.Printf("Set item id [%d] read", id)
@@ -233,7 +233,7 @@ WHERE rf.active = true
 		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.URI,
 			&item.Description, &item.PublicationDate)
 		if err != nil {
-			log.Printf("Failed to scan row information: %s", err.Error())
+			log.Printf("Failed to scan row information: %s", err)
 			return nil, err
 		}
 
@@ -243,12 +243,12 @@ WHERE rf.active = true
 		// sanitise the text.
 		item.Title, err = gorselib.SanitiseItemText(item.Title)
 		if err != nil {
-			log.Printf("Failed to sanitise title: %s", err.Error())
+			log.Printf("Failed to sanitise title: %s", err)
 			return nil, err
 		}
 		item.Description, err = gorselib.SanitiseItemText(item.Description)
 		if err != nil {
-			log.Printf("Failed to sanitise description: %s", err.Error())
+			log.Printf("Failed to sanitise description: %s", err)
 			return nil, err
 		}
 
@@ -302,7 +302,7 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 
 	header, err := template.ParseFiles("templates/_header.html")
 	if err != nil {
-		log.Printf("Failed to load header: %s", err.Error())
+		log.Printf("Failed to load header: %s", err)
 		return err
 	}
 
@@ -318,32 +318,31 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 	contentTemplatePath := "templates/" + contentTemplateBasePath
 	content, err := template.New("content").Funcs(funcMap).ParseFiles(contentTemplatePath)
 	if err != nil {
-		log.Printf("Failed to load content template [%s]: %s",
-			contentTemplate, err.Error())
+		log.Printf("Failed to load content template [%s]: %s", contentTemplate, err)
 		return err
 	}
 
 	// footer.
 	footer, err := template.ParseFiles("templates/_footer.html")
 	if err != nil {
-		log.Printf("Failed to load footer: %s", err.Error())
+		log.Printf("Failed to load footer: %s", err)
 		return err
 	}
 
 	// execute the templates and write them out.
 	err = header.Execute(rw, data)
 	if err != nil {
-		log.Printf("Failed to execute header: %s", err.Error())
+		log.Printf("Failed to execute header: %s", err)
 		return err
 	}
 	err = content.ExecuteTemplate(rw, contentTemplateBasePath, data)
 	if err != nil {
-		log.Printf("Failed to execute content: %s", err.Error())
+		log.Printf("Failed to execute content: %s", err)
 		return err
 	}
 	err = footer.Execute(rw, data)
 	if err != nil {
-		log.Printf("Failed to execute footer: %s", err.Error())
+		log.Printf("Failed to execute footer: %s", err)
 		return err
 	}
 	return nil
@@ -366,7 +365,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// we updated was.
 	feeds, err := gorselib.RetrieveFeeds(db)
 	if err != nil {
-		log.Printf("Failed to retrieve feeds: %s", err.Error())
+		log.Printf("Failed to retrieve feeds: %s", err)
 		send500Error(rw, "Failed to retrieve feeds")
 		return
 	}
@@ -400,7 +399,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// Retrieve items from the database.
 	items, err := retrieveFeedItems(db, settings, order, page)
 	if err != nil {
-		log.Printf("Failed to retrieve items: %s", err.Error())
+		log.Printf("Failed to retrieve items: %s", err)
 		send500Error(rw, "Failed to retrieve items")
 		return
 	}
@@ -429,7 +428,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// Get count of total feed items (all pages).
 	totalItems, err := countTotalItems(db)
 	if err != nil {
-		log.Printf(err.Error())
+		log.Print(err)
 		send500Error(rw, "Failed to lookup count.")
 		return
 	}
@@ -491,7 +490,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 
 	err = renderPage(rw, "_list_items", listItemsPage)
 	if err != nil {
-		log.Printf("Failure rendering page: %s", err.Error())
+		log.Printf("Failure rendering page: %s", err)
 		send500Error(rw, "Failed to render page")
 		return
 	}
@@ -508,7 +507,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	// in order to get at these, we have to run ParseForm().
 	err := request.ParseForm()
 	if err != nil {
-		log.Printf("Failed to parse form: %s", err.Error())
+		log.Printf("Failed to parse form: %s", err)
 		send500Error(rw, "Failed to parse request")
 		return
 	}
@@ -531,8 +530,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 			var id int64
 			id, err = strconv.ParseInt(idStr, 10, 64)
 			if err != nil {
-				log.Printf("Failed to parse id into an integer %s: %s",
-					idStr, err.Error())
+				log.Printf("Failed to parse id into an integer %s: %s", idStr, err)
 				send500Error(rw, "Invalid id")
 				return
 			}
@@ -598,7 +596,7 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	// Get existing session, or make a new one.
 	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
 	if err != nil {
-		log.Printf("Session Get error: %s", err.Error())
+		log.Printf("Session Get error: %s", err)
 		send500Error(rw, "Failed to get your session.")
 		context.Clear(request)
 		return
@@ -651,7 +649,7 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 		matched, err := regexp.MatchString(actionHandler.PathPattern,
 			request.URL.Path)
 		if err != nil {
-			log.Printf("Error matching regex: %s", err.Error())
+			log.Printf("Error matching regex: %s", err)
 			continue
 		}
 
@@ -705,7 +703,7 @@ func main() {
 	// don't use os.Create() because that truncates.
 	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		log.Printf("Failed to open log file: %s: %s", *logPath, err.Error())
+		log.Printf("Failed to open log file: %s: %s", *logPath, err)
 		os.Exit(1)
 	}
 	log.SetOutput(logFh)
@@ -713,8 +711,7 @@ func main() {
 	// chdir to the www path so we can get what we need to serve up.
 	err = os.Chdir(*wwwPath)
 	if err != nil {
-		log.Printf("Unable to chdir to www directory: %s: %s", *wwwPath,
-			err.Error())
+		log.Printf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
 		os.Exit(1)
 	}
 
@@ -722,7 +719,7 @@ func main() {
 	var settings GorseConfig
 	err = config.GetConfig(*configPath, &settings)
 	if err != nil {
-		log.Printf("Failed to retrieve config: %s", err.Error())
+		log.Printf("Failed to retrieve config: %s", err)
 		os.Exit(1)
 	}
 
@@ -735,7 +732,7 @@ func main() {
 		settings.ListenPort)
 	listener, err := net.Listen("tcp", listenHostPort)
 	if err != nil {
-		log.Print("Failed to open port: " + err.Error())
+		log.Printf("Failed to open port: %s", err)
 		os.Exit(1)
 	}
 
@@ -749,7 +746,7 @@ func main() {
 	log.Print("Starting to serve requests.")
 	err = fcgi.Serve(listener, httpHandler)
 	if err != nil {
-		log.Print("Failed to start serving HTTP: " + err.Error())
+		log.Printf("Failed to start serving HTTP: %s", err)
 		os.Exit(1)
 	}
 }

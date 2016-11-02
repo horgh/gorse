@@ -179,7 +179,7 @@ func SanitiseItemText(text string) (string, error) {
 	// first remove raw html.
 	re, err := regexp.Compile("(?s)<.*?>")
 	if err != nil {
-		log.Printf("Failed to compile html regexp: %s", err.Error())
+		log.Printf("Failed to compile html regexp: %s", err)
 		return text, err
 	}
 	text = re.ReplaceAllString(text, "")
@@ -190,7 +190,7 @@ func SanitiseItemText(text string) (string, error) {
 	// turn any multiple spaces into a single space.
 	re, err = regexp.Compile("(?s)\\s+")
 	if err != nil {
-		log.Printf("Failed to compile whitespace regexp: %s", err.Error())
+		log.Printf("Failed to compile whitespace regexp: %s", err)
 		return text, err
 	}
 	text = re.ReplaceAllString(text, " ")
@@ -454,7 +454,7 @@ func WriteFeedXML(feed *RSSFeed, filename string) error {
 	// build the xml data.
 	xmlBody, err := xml.MarshalIndent(rss, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal xml: %s", err.Error())
+		log.Printf("Failed to marshal xml: %s", err)
 		return err
 	}
 
@@ -471,7 +471,7 @@ func WriteFeedXML(feed *RSSFeed, filename string) error {
 	// write our file.
 	err = ioutil.WriteFile(filename, xmlDoc, 0644)
 	if err != nil {
-		log.Printf("Failed to write file [%s]: %s", filename, err.Error())
+		log.Printf("Failed to write file [%s]: %s", filename, err)
 		return err
 	}
 
