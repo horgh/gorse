@@ -23,6 +23,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gorilla/context"
@@ -54,6 +55,10 @@ type GorseConfig struct {
 // NOTE: According to the database/sql documentation, the DB type
 //   is indeed safe for concurrent use by multiple goroutines.
 var DB *sql.DB
+
+// DBLock helps us avoid race conditions associated with the database. Such as
+// connecting to it (assigning the global).
+var DBLock sync.Mutex
 
 // HTTPHandler holds functions/data used to service HTTP requests.
 // We need this struct as we must pass instances of it to fcgi.Serve.
@@ -102,9 +107,19 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 		log.Printf("Database ping failed: %s", err)
 
 		// Continue on, but set us so that we attempt to reconnect.
-		// TODO: Race condition
-		_ = DB.Close()
-		DB = nil
+		DBLock.Lock()
+		if DB != nil {
+			_ = DB.Close()
+			DB = nil
+		}
+		DBLock.Unlock()
+	}
+
+	DBLock.Lock()
+	defer DBLock.Unlock()
+
+	if DB != nil {
+		return DB, nil
 	}
 
 	db, err := connectToDB(settings)
@@ -114,7 +129,6 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 	}
 
 	// Set global
-	// TODO: Race condition
 	DB = db
 
 	return DB, nil
