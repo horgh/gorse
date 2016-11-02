@@ -7,7 +7,7 @@ a {
 	text-decoration: none;
 }
 
-div#top-bar {
+#top-bar {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -15,7 +15,7 @@ div#top-bar {
 	text-align: right;
 	height: 5%;
 }
-div#top-bar button {
+#top-bar button {
 	height: 100%;
 	min-width: 10%;
 	background-color: #ff5ff7;
@@ -24,7 +24,7 @@ div#top-bar button {
 	border: 1px solid black;
 }
 
-ul.success {
+.success {
 	background-color: green;
 	color: white;
 	list-style: none;
@@ -33,79 +33,79 @@ ul.success {
 	width: 50%;
 }
 
-a.expand_feeds {
+.expand_feeds {
 	font-size: small;
 	font-weight: normal;
 }
 
-ul#feeds {
+#feeds {
 	margin: 0;
 	padding: 0;
 	list-style: none inside none;
 	font-size: small;
 }
-ul#feeds li {
+#feeds li {
 	margin: 0;
 	padding: 0;
 }
-ul#feeds li h3 {
+#feeds li h3 {
 	font-size: small;
 	display: inline-block;
 	margin: 0;
 	padding: 0;
 }
-ul#feeds li span {
+#feeds li span {
 	font-size: smaller;
 }
-ul#feeds li span span.next_time {
+#feeds li span .next_time {
 	font-weight: bold;
 }
-ul#feeds li span span.update_times {
+#feeds li span .update_times {
 	font-style: italic;
 }
 
-div.update_button {
+.update_button {
 	width: 100%;
 	text-align: right;
 	margin: 0 0 10px 0;
 	padding: 0;
 }
-div.update_button button {
+.update_button button {
 	padding: 25px 50px;
 	right: 0;
 }
 
-ul#items {
+#items {
 	margin: 0;
 	padding: 0;
 	list-style: none inside none;
 }
-ul#items li {
+#items li {
 	margin: 0;
 	padding: 10px 5px 10px 5px;
 }
-ul#items li.row1 {
+#items .row1 {
 	background-color: #99FFFF;
 }
-ul#items li.row2 {
+#items .row2 {
 	background-color: #66CCFF;
 }
-ul#items li.clicked {
+#items .clicked {
 	background-color: #99FF33;
 }
-ul#items li h1 {
+#items li h1 {
 	font-size: medium;
 	margin: 0;
 	padding: 0;
 }
-ul#items li h1 a {
+#items li h1 a {
 	font-weight: normal;
 }
-ul#items li h1 .date {
+#items li h1 .date {
 	font-size: small;
 	font-weight: normal;
 }
-ul#items li p {
+#items li p {
 	margin: 0;
 	padding: 0;
 }
