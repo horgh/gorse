@@ -1,14 +1,11 @@
-/*
- * 2013-06-29
- * will@summercat.com
- *
- * gorse is a web front end to the database built by my rss poller.
- *
- * we list the feed items and provide a way to mark those that are read.
- *
- * for the database schema, refer to the rss poller.
- */
-
+//
+// gorse is a web front end to a database of RSS feeds/items. The database gets
+// populated by my RSS poller, gorsepoll.
+//
+// The interface shows items from feeds and allows flagging them as read.
+//
+// For the database schema, refer to gorsepoll.
+//
 package main
 
 import (
@@ -16,9 +13,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/gorilla/context"
-	"github.com/gorilla/sessions"
-	_ "github.com/lib/pq"
 	"html/template"
 	"log"
 	"math"
@@ -29,36 +23,42 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
+
+	"github.com/gorilla/context"
+	"github.com/gorilla/sessions"
+	_ "github.com/lib/pq"
 	"summercat.com/config"
 	"summercat.com/gorse/gorselib"
-	"time"
 )
 
+// GorseConfig holds runtime configuration information.
 type GorseConfig struct {
 	ListenHost string
 	ListenPort uint64
-	DbUser     string
-	DbPass     string
-	DbName     string
-	DbHost     string
+	DBUser     string
+	DBPass     string
+	DBName     string
+	DBHost     string
 
 	// TODO: Auto detect timezone, or move this to a user setting
 	DisplayTimeZone string
 
-	UriPrefix               string
+	URIPrefix               string
 	CookieAuthenticationKey string
 	SessionName             string
 }
 
-// Global db connection.
+// DB is the connection to the database.
 // This is so we try to share a single connection for multiple requests.
 // NOTE: According to the database/sql documentation, the DB type
 //   is indeed safe for concurrent use by multiple goroutines.
-var Db *sql.DB
+var DB *sql.DB
 
+// HTTPHandler holds functions/data used to service HTTP requests.
 // We need this struct as we must pass instances of it to fcgi.Serve.
 // This is because it must conform to the http.Handler interface.
-type HttpHandler struct {
+type HTTPHandler struct {
 	settings     *GorseConfig
 	sessionStore *sessions.CookieStore
 }
@@ -72,10 +72,10 @@ const (
 
 const pageSize = 50
 
-// connectToDb opens a new connection to the database.
-func connectToDb(settings *GorseConfig) (*sql.DB, error) {
+// connectToDB opens a new connection to the database.
+func connectToDB(settings *GorseConfig) (*sql.DB, error) {
 	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
-		settings.DbUser, settings.DbPass, settings.DbName, settings.DbHost)
+		settings.DBUser, settings.DBPass, settings.DBName, settings.DBHost)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -87,41 +87,42 @@ func connectToDb(settings *GorseConfig) (*sql.DB, error) {
 	return db, nil
 }
 
-// getDb connects us to the database if necessary, and returns an active
+// getDB connects us to the database if necessary, and returns an active
 // database connection.
-// we use the global Db variable to try to ensure we use a single connection.
-func getDb(settings *GorseConfig) (*sql.DB, error) {
+// we use the global DB variable to try to ensure we use a single connection.
+func getDB(settings *GorseConfig) (*sql.DB, error) {
 	// If we have a db connection, ensure that it is still available so that we
 	// reconnect if it is not.
-	if Db != nil {
-		err := Db.Ping()
+	if DB != nil {
+		err := DB.Ping()
 		if err == nil {
-			return Db, nil
+			return DB, nil
 		}
 
-		log.Printf("Database ping failed: %s", err.Error())
+		log.Printf("Database ping failed: %s", err)
 
 		// Continue on, but set us so that we attempt to reconnect.
-		Db.Close()
-		Db = nil
+		// TODO: Race condition
+		_ = DB.Close()
+		DB = nil
 	}
 
-	db, err := connectToDb(settings)
+	db, err := connectToDB(settings)
 	if err != nil {
-		log.Printf("Failed to connect to the database: %s", err.Error())
+		log.Printf("Failed to connect to the database: %s", err)
 		return nil, err
 	}
 
 	// Set global
-	// TODO: Race?
-	Db = db
+	// TODO: Race condition
+	DB = db
 
-	return Db, nil
+	return DB, nil
 }
 
 // setItemRead sets the given item read in the database.
 func setItemRead(db *sql.DB, id int64) error {
-	var query string = `
+	query := `
 UPDATE rss_item
 SET read = true
 WHERE id = $1
@@ -159,10 +160,14 @@ WHERE rf.active = true
 	var count int
 	err = rows.Scan(&count)
 	if err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return -1, err
 	}
-	rows.Close()
+
+	err = rows.Close()
+	if err != nil {
+		return -1, fmt.Errorf("Problem closing rows: %s", err)
+	}
 
 	return count, nil
 }
@@ -176,7 +181,7 @@ func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
 		return nil, errors.New("Invalid page number.")
 	}
 
-	var query string = `
+	query := `
 SELECT
 rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
 FROM rss_item ri
@@ -243,11 +248,11 @@ WHERE rf.active = true
 // body.
 func send500Error(rw http.ResponseWriter, message string) {
 	rw.WriteHeader(http.StatusInternalServerError)
-	rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
+	_, _ = rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
 }
 
-// getRowCssClass takes a row index and determines the css class to use.
-func getRowCssClass(index int) string {
+// getRowCSSClass takes a row index and determines the css class to use.
+func getRowCSSClass(index int) string {
 	if index%2 == 0 {
 		return "row1"
 	}
@@ -289,7 +294,7 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 
 	// content.
 	funcMap := template.FuncMap{
-		"getRowCssClass": getRowCssClass,
+		"getRowCSSClass": getRowCSSClass,
 	}
 	// we need the base path as that is the name that gets assigned
 	// to the template internally due to how we create the template.
@@ -335,9 +340,9 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 // it implements the type RequestHandlerFunc
 func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
-	db, err := getDb(settings)
+	db, err := getDB(settings)
 	if err != nil {
-		log.Printf("Failed to get database connection: %s", err.Error())
+		log.Printf("Failed to get database connection: %s", err)
 		send500Error(rw, "Failed to connect to database")
 		return
 	}
@@ -423,7 +428,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	prevPage := page - 1
 
 	// We may have messages to display.
-	// TODO: Right now only success messages
+	// Right now we only have success messages
 	flashes := session.Flashes()
 	var successMessages []string
 	for _, flash := range flashes {
@@ -433,8 +438,12 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		}
 	}
 
-	// TODO: Error check Save()
-	session.Save(request, rw)
+	err = session.Save(request, rw)
+	if err != nil {
+		log.Printf("Unable to save session: %s", err)
+		send500Error(rw, "Failed to save your session.")
+		return
+	}
 
 	// Show the page.
 
@@ -490,9 +499,9 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	db, err := getDb(settings)
+	db, err := getDB(settings)
 	if err != nil {
-		log.Printf("Failed to get database connection: %s", err.Error())
+		log.Printf("Failed to get database connection: %s", err)
 		send500Error(rw, "Failed to connect to database")
 		return
 	}
@@ -500,7 +509,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	// check if we have any items to mark as read. these are in
 	// the request key 'read_item'.
 	readItems, exists := request.PostForm["read_item"]
-	var set_read_count int = 0
+	setReadCount := 0
 	if exists {
 		// this is associated with a slice of strings. each of these
 		// is an id we want to mark as read now.
@@ -520,16 +529,20 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
-			set_read_count++
+			setReadCount++
 		}
 	}
 
-	log.Printf("Set %d item(s) read", set_read_count)
+	log.Printf("Set %d item(s) read", setReadCount)
 
 	session.AddFlash("Updated read flags")
 
-	// TODO: error check Save()
-	session.Save(request, rw)
+	err = session.Save(request, rw)
+	if err != nil {
+		log.Printf("Unable to save session: %s", err)
+		send500Error(rw, "Failed to save your session.")
+		return
+	}
 
 	// TODO: should we get path from the config?
 	var uri = "/gorse/?sort-order=" +
@@ -556,14 +569,14 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 
 	// we want to serve up the directory without the global uri prefix
 	// since it is relative / may bare no resemblance to the request path.
-	var strippedHandler = http.StripPrefix(settings.UriPrefix+"/static/",
+	var strippedHandler = http.StripPrefix(settings.URIPrefix+"/static/",
 		fileserverHandler)
 	strippedHandler.ServeHTTP(rw, request)
 }
 
 // ServeHTTP handles an http request. it is invoked by the fastcgi
 // package in a goroutine.
-func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
+func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	request *http.Request) {
 	log.Printf("Serving new [%s] request from [%s] to path [%s]",
 		request.Method, request.RemoteAddr, request.URL.Path)
@@ -596,21 +609,21 @@ func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
 		// GET /
 		RequestHandler{
 			Method:      "GET",
-			PathPattern: "^" + handler.settings.UriPrefix + "/?$",
+			PathPattern: "^" + handler.settings.URIPrefix + "/?$",
 			Func:        handlerListItems,
 		},
 
 		// POST /update_read_flags
 		RequestHandler{
 			Method:      "POST",
-			PathPattern: "^" + handler.settings.UriPrefix + "/update_read_flags/?$",
+			PathPattern: "^" + handler.settings.URIPrefix + "/update_read_flags/?$",
 			Func:        handlerUpdateReadFlags,
 		},
 
 		// GET /static/*
 		RequestHandler{
 			Method:      "GET",
-			PathPattern: "^" + handler.settings.UriPrefix + "/static/",
+			PathPattern: "^" + handler.settings.URIPrefix + "/static/",
 			Func:        handlerStaticFiles,
 		},
 	}
@@ -642,19 +655,14 @@ func (handler HttpHandler) ServeHTTP(rw http.ResponseWriter,
 	// There was no matching handler - send a 404.
 	log.Printf("No handler for this request.")
 	rw.WriteHeader(http.StatusNotFound)
-	// TODO: We should make this build the body in a template instead.
-	rw.Write([]byte("<h1>404 Not Found</h1>"))
-	session.Save(request, rw)
+	_, _ = rw.Write([]byte("<h1>404 Not Found</h1>"))
+	_ = session.Save(request, rw)
 	context.Clear(request)
 }
 
-// main is the entry point to the program.
 func main() {
-	// set up the standard logger. we want to set flags to make it give
-	// more information.
 	log.SetFlags(log.Ldate | log.Ltime)
 
-	// command line arguments.
 	configPath := flag.String("config-file", "",
 		"Path to a configuration file.")
 	logPath := flag.String("log-file", "",
@@ -717,7 +725,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var httpHandler = HttpHandler{
+	var httpHandler = HTTPHandler{
 		settings:     &settings,
 		sessionStore: sessionStore,
 	}

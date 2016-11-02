@@ -47,7 +47,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 
 	<ul id="items">
 		{{range $index, $element := .Items}}
-			{{$rowClass := getRowCssClass $index}}
+			{{$rowClass := getRowCSSClass $index}}
 			<li class="{{$rowClass}}">
 				<h1>
 					<a href="#" class="check-it" data-id="{{.Id}}">✓</a>
