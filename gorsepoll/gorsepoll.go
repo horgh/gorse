@@ -88,15 +88,13 @@ func retrieveFeed(feed *gorselib.RSSFeed) ([]byte, error) {
 }
 
 // feedItemExists checks if this item is already recorded in the database.
-// it does this by checking if the uri exists for the given feed id.
+//
+// It does this by checking if the uri exists for the given feed id.
 func feedItemExists(db *sql.DB, feed *gorselib.RSSFeed,
 	item *gorselib.Item) (bool, error) {
-	query := `
-SELECT id
-FROM rss_item
-WHERE rss_feed_id = $1
-	AND link = $2
-`
+
+	// Check main table.
+	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
 	rows, err := db.Query(query, feed.ID, item.Link)
 	if err != nil {
 		log.Printf("Failed to check if item title [%s] exists for feed [%s]: %s",
@@ -104,12 +102,36 @@ WHERE rss_feed_id = $1
 		return false, err
 	}
 
-	// if we have a row, then the item exists.
+	// If we have a row, then the item exists.
 	count := 0
 	for rows.Next() {
 		count++
 	}
-	return count > 0, nil
+
+	if count > 0 {
+		return true, nil
+	}
+
+	// Check archive table.
+	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND link = $2`
+	rows, err = db.Query(query, feed.ID, item.Link)
+	if err != nil {
+		log.Printf("Failed to check if item title [%s] exists for feed [%s]: %s",
+			item.Title, feed.Name, err)
+		return false, err
+	}
+
+	// If we have a row, then the item exists.
+	count = 0
+	for rows.Next() {
+		count++
+	}
+
+	if count > 0 {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // recordFeedItem inserts the feed item information into the database if it
