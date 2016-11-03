@@ -1,7 +1,13 @@
--- the SQL table definitions for the rss reader.
--- these are made for postgresql 9.1.9.
+--
+-- The SQL table definitions for the RSS reader.
+--
+-- This is made for PostgreSQL 9.1 but should work with most versions.
+--
+-- NOTE: To read this schema you should look at upgrades too. This is the
+--   original schema before upgrades were applied.
+--
 
--- track each feed to work with.
+-- Track each feed to work with.
 CREATE TABLE rss_feed (
 	id SERIAL,
 	name VARCHAR NOT NULL,
@@ -15,7 +21,7 @@ CREATE TABLE rss_feed (
 	PRIMARY KEY (id)
 );
 
--- track rss feed items.
+-- Track RSS feed items.
 CREATE TABLE rss_item (
 	id SERIAL,
 	-- html encoded.

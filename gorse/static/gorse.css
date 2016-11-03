@@ -90,8 +90,11 @@ a {
 #items .row2 {
 	background-color: #66CCFF;
 }
-#items .clicked {
+#items .read {
 	background-color: #99FF33;
+}
+#items .archive {
+	background-color: #ffcc33;
 }
 #items li h1 {
 	font-size: medium;

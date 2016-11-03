@@ -18,37 +18,43 @@ Gorse.log = function(msg) {
 	window.console.log(msg);
 };
 
-Gorse.toggle_read = function(item_li) {
-	if ($(item_li).hasClass('clicked')) {
-		$(item_li).removeClass('clicked');
+// Toggle between 3 states:
+// - none, read, archive
+Gorse.toggle_read_state = function(item_li) {
+	// Read -> archive.
+	if ($(item_li).hasClass('read')) {
+		$(item_li).removeClass('read');
+		$(item_li).addClass('archive');
 
-		// remove the input indicating it is clicked.
-		$('input.read_item', item_li).remove();
-
-		Gorse.update_counts();
-
+		$('input.state-change', item_li).attr('name', 'archive-item');
 		return;
 	}
 
-	$(item_li).addClass('clicked');
+	// Archive -> none.
+	if ($(item_li).hasClass('archive')) {
+		$(item_li).removeClass('archive');
 
-	// add an input so it will be submitted as clicked.
+		$('input.state-change', item_li).remove();
+		return;
+	}
+
+	// None -> read
+	$(item_li).addClass('read');
+
 	var read_ele = $('<input>').attr({
-		'type': 'hidden',
-		'name': 'read_item',
-		'class': 'read_item',
+		'type':  'hidden',
+		'name':  'read-item',
+		'class': 'state-change',
 		'value': $('.item_id', item_li).val()
 	});
 
 	$(item_li).append(read_ele);
-
-	Gorse.update_counts();
 };
 
 // Determine how many items we have selected. Update a displayed counter.
 Gorse.update_counts = function() {
 	// Count how many we have selected.
-	var count = $('input.read_item').length;
+	var count = $('input.state-change').length;
 
 	// Display the counter in the save button.
 	var label = 'Save (' + count + ')';
@@ -56,28 +62,18 @@ Gorse.update_counts = function() {
 };
 
 $(document).ready(function() {
-	// add a click handler to all feed item rows.
+	// Add a click handler to all feed item rows.
 	$('ul#items > li').each(function(i, li) {
-		// when we click an item row, we change its class to show
-		// it is clicked, and set a form input to indicate it is clicked.
 		$(li).click(function() {
-			Gorse.toggle_read($(this));
+			Gorse.toggle_read_state($(this));
+			Gorse.update_counts();
 		});
 	});
 
-	// And to the checkmark
-	$('a.check-it').each(function() {
-		$(this).click(function() {
-			var item_li = $(this).closest('li');
-			Gorse.toggle_read(item_li);
-			return false;
-		});
-	});
-
-	// hide the list of feed information by default.
+	// Hide the list of feed information by default.
 	$('ul#feeds').hide();
 
-	// setup the 'feed expand' link.
+	// Setup the 'feed expand' link.
 	$('a.expand_feeds')
 		.text('+ Expand')
 		.click(function(evt) {
@@ -92,8 +88,7 @@ $(document).ready(function() {
 			}
 		});
 
-	// when we click the save button, submit the form with our
-	// read elements.
+	// When we click the save button, submit the form with our read elements.
 	$('button#update-flags-top').click(function() {
 		$('form#list-items-form').submit();
 	});

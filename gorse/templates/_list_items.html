@@ -34,8 +34,11 @@
 
 <p>
 Showing {{len .Items}}/{{.TotalItems}} feed items.
-{{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc">Sort ascending</a>{{end}}
-{{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc">Sort descending</a>{{end}}
+{{if eq .ReadState .Unread}}<a href="{{.Path}}?sort-order={{.SortOrder}}&amp;user-id={{.UserID}}&amp;read-state=read-later">Archived</a>{{end}}
+{{if eq .ReadState .ReadLater}}<a href="{{.Path}}?sort-order={{.SortOrder}}&amp;user-id={{.UserID}}&amp;read-state=unread">Unread</a>{{end}}
+|
+{{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort ascending</a>{{end}}
+{{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort descending</a>{{end}}
 </p>
 
 <form action="{{.Path}}update_read_flags"
@@ -44,13 +47,14 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 	id="list-items-form"
 	>
 	<input type="hidden" name="sort-order" value="{{.SortOrder}}">
+	<input type="hidden" name="user-id" value="{{.UserID}}">
+	<input type="hidden" name="read-state" value="{{.ReadState}}">
 
 	<ul id="items">
 		{{range $index, $element := .Items}}
 			{{$rowClass := getRowCSSClass $index}}
 			<li class="{{$rowClass}}">
 				<h1>
-					<a href="#" class="check-it" data-id="{{.ID}}">✓</a>
 					{{.FeedName}}
 					<a href="{{.URI}}">{{.Title}}</a>
 					<span class="date">
@@ -75,5 +79,5 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 	<button>Save</button>
 </form>
 
-{{if gt .Page 1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.PreviousPage}}">Previous page</a> {{end}}
-{{if ne .NextPage -1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.NextPage}}">Next page</a>{{end}}
+{{if gt .Page 1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.PreviousPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Previous page</a>{{end}}
+{{if ne .NextPage -1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.NextPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Next page</a>{{end}}

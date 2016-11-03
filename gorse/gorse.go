@@ -75,6 +75,18 @@ const (
 	sortDescending
 )
 
+// ReadState holds an item's state (rss_item_state table, read_state type).
+type ReadState int
+
+const (
+	// Unread means the item is not yet read.
+	Unread ReadState = iota
+	// Read means the item was read.
+	Read
+	// ReadLater means to save the item to read later.
+	ReadLater
+)
+
 const pageSize = 50
 
 // connectToDB opens a new connection to the database.
@@ -134,31 +146,41 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 	return DB, nil
 }
 
-// setItemRead sets the given item read in the database.
-func setItemRead(db *sql.DB, id int64) error {
-	query := `UPDATE rss_item SET read = true WHERE id = $1`
-	_, err := db.Exec(query, id)
+// setItemReadState sets the given item's state in the database.
+func setItemReadState(db *sql.DB, id int64, userID int, state ReadState) error {
+	// Upsert.
+	query := `
+INSERT INTO rss_item_state
+(user_id, item_id, state)
+VALUES($1, $2, $3)
+ON CONFLICT (user_id, item_id) DO UPDATE
+SET state = $4
+`
+	_, err := db.Exec(query, userID, id, state.String(), state.String())
 	if err != nil {
 		log.Printf("Failed to set item id [%d] read: %s", id, err)
 		return err
 	}
-	log.Printf("Set item id [%d] read", id)
+	log.Printf("Set item id [%d] %s", id, state)
 	return nil
 }
 
-// countTotalItems retrieves a count of unread feed items.
+// countItems retrieves a count of items.
 //
 // This is for pagination.
-func countTotalItems(db *sql.DB) (int, error) {
+func countItems(db *sql.DB, userID int, state ReadState) (int, error) {
 	query := `
 SELECT COUNT(1) AS count
 FROM rss_item ri
 LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
-WHERE rf.active = true
-	AND ri.read = false
+LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+WHERE
+rf.active = true AND
+COALESCE(ris.state, 'unread') = $1 AND
+COALESCE(ris.user_id, $2) = $3
 `
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, state.String(), userID, userID)
 	if err != nil {
 		return -1, err
 	}
@@ -182,10 +204,10 @@ WHERE rf.active = true
 	return count, nil
 }
 
-// retrieveFeedItems retrieves feed items from the database which are
-// marked non-read.
+// retrieveFeedItems retrieves feed items from the database which are marked
+// a given state.
 func retrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
-	page int) ([]gorselib.RSSItem, error) {
+	page, userID int, state ReadState) ([]gorselib.RSSItem, error) {
 
 	if page < 1 {
 		return nil, errors.New("Invalid page number.")
@@ -196,8 +218,11 @@ SELECT
 rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
 FROM rss_item ri
 LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
-WHERE rf.active = true
-	AND ri.read = false
+LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+WHERE
+rf.active = true AND
+COALESCE(ris.state, 'unread') = $1 AND
+COALESCE(ris.user_id, $2) = $3
 `
 
 	if order == sortAscending {
@@ -206,11 +231,11 @@ WHERE rf.active = true
 		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
 	}
 
-	query += " LIMIT $1 OFFSET $2"
+	query += " LIMIT $4 OFFSET $5"
 
 	offset := (page - 1) * pageSize
 
-	rows, err := db.Query(query, pageSize, offset)
+	rows, err := db.Query(query, state.String(), userID, userID, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -252,6 +277,12 @@ WHERE rf.active = true
 	}
 
 	return items, nil
+}
+
+// send400Error sends a bad request error with the given message in the body.
+func send400Error(rw http.ResponseWriter, message string) {
+	rw.WriteHeader(http.StatusBadRequest)
+	_, _ = rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
 }
 
 // send500Error sends an internal server error with the given message in the
@@ -349,6 +380,7 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 // it implements the type RequestHandlerFunc
 func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
+
 	db, err := getDB(settings)
 	if err != nil {
 		log.Printf("Failed to get database connection: %s", err)
@@ -392,8 +424,29 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		}
 	}
 
+	userIDStr := requestValues.Get("user-id")
+	if userIDStr == "" {
+		log.Printf("No user ID found")
+		send400Error(rw, "No user ID found.")
+		return
+	}
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		log.Printf("Invalid user ID: %s: %s", userIDStr, err)
+		send500Error(rw, "Invalid user ID.")
+		return
+	}
+
+	// We either view unread or read later items. Those marked read we never can
+	// see again currently.
+	readState := Unread
+	requestedReadState := requestValues.Get("read-state")
+	if requestedReadState == "read-later" {
+		readState = ReadLater
+	}
+
 	// Retrieve items from the database.
-	items, err := retrieveFeedItems(db, settings, order, page)
+	items, err := retrieveFeedItems(db, settings, order, page, userID, readState)
 	if err != nil {
 		log.Printf("Failed to retrieve items: %s", err)
 		send500Error(rw, "Failed to retrieve items")
@@ -419,7 +472,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 
 	// Get count of total feed items (all pages).
-	totalItems, err := countTotalItems(db)
+	totalItems, err := countItems(db, userID, readState)
 	if err != nil {
 		log.Print(err)
 		send500Error(rw, "Failed to lookup count.")
@@ -465,6 +518,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Page             int
 		NextPage         int
 		PreviousPage     int
+		UserID           int
+		ReadState        ReadState
+		Unread           ReadState
+		ReadLater        ReadState
 	}
 
 	listItemsPage := ListItemsPage{
@@ -479,6 +536,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Page:             page,
 		NextPage:         nextPage,
 		PreviousPage:     prevPage,
+		UserID:           userID,
+		ReadState:        readState,
+		Unread:           Unread,
+		ReadLater:        ReadLater,
 	}
 
 	err = renderPage(rw, "_list_items", listItemsPage)
@@ -490,14 +551,16 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	log.Print("Rendered list items page.")
 }
 
-// handlerUpdateReadFlags handles an update read flags request.
-// it implements the type RequestHandlerFunc
-// we update the requested flags in the database, and then redirect us
-// back to the list of items page.
+// handlerUpdateReadFlags handles an update read flags (item state) request.
+//
+// It implements the type RequestHandlerFunc
+//
+// We update the requested flags in the database, and then redirect us back to
+// the list of items page.
 func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
-	// we should have some posted request values.
-	// in order to get at these, we have to run ParseForm().
+	// We should have some posted request values. In order to get at these, we
+	// have to run ParseForm().
 	err := request.ParseForm()
 	if err != nil {
 		log.Printf("Failed to parse form: %s", err)
@@ -512,13 +575,37 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// check if we have any items to mark as read. these are in
-	// the request key 'read_item'.
-	readItems, exists := request.PostForm["read_item"]
+	userIDStr := request.PostForm.Get("user-id")
+	if userIDStr == "" {
+		log.Printf("No user ID in request.")
+		send400Error(rw, "Incomplete request")
+		return
+	}
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		log.Printf("Bad user ID: %s: %s", userIDStr, err)
+		send400Error(rw, "Bad user ID")
+		return
+	}
+
+	// What read state were we viewing? This tells us where to go after.
+	// We either view unread or read later items. Those marked read we never can
+	// see again currently.
+	readState := Unread
+	requestedReadState := request.PostForm.Get("read-state")
+	if requestedReadState == "read-later" {
+		readState = ReadLater
+	}
+
+	// Set some read.
+
+	// Check if we have any items to update. These are in the request key
+	// 'read-item'.
+	readItems, exists := request.PostForm["read-item"]
 	setReadCount := 0
 	if exists {
-		// this is associated with a slice of strings. each of these
-		// is an id we want to mark as read now.
+		// This is associated with a slice of strings. Each of these is an id we
+		// want to mark as read now.
 		for _, idStr := range readItems {
 			var id int64
 			id, err = strconv.ParseInt(idStr, 10, 64)
@@ -528,7 +615,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
-			err = setItemRead(db, id)
+			err = setItemReadState(db, id, userID, Read)
 			if err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
@@ -538,9 +625,43 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		}
 	}
 
-	log.Printf("Set %d item(s) read", setReadCount)
+	if setReadCount == 1 {
+		log.Printf("Set %d item read.", setReadCount)
+	} else {
+		log.Printf("Set %d items read.", setReadCount)
+	}
 
-	session.AddFlash("Updated read flags")
+	// Set some archived.
+
+	archiveItems, exists := request.PostForm["archive-item"]
+	archivedCount := 0
+	if exists {
+		for _, idStr := range archiveItems {
+			var id int64
+			id, err = strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				log.Printf("Failed to parse id into an integer %s: %s", idStr, err)
+				send500Error(rw, "Invalid id")
+				return
+			}
+
+			err = setItemReadState(db, id, userID, ReadLater)
+			if err != nil {
+				send500Error(rw, "Unable to update read flag for "+idStr)
+				return
+			}
+
+			archivedCount++
+		}
+	}
+
+	if archivedCount == 1 {
+		log.Printf("Archived %d item.", archivedCount)
+	} else {
+		log.Printf("Archived %d items.", archivedCount)
+	}
+
+	session.AddFlash("Saved.")
 
 	err = session.Save(request, rw)
 	if err != nil {
@@ -549,9 +670,11 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// TODO: should we get path from the config?
-	var uri = "/gorse/?sort-order=" +
-		url.QueryEscape(request.PostForm.Get("sort-order"))
+	// TODO: Should we get path from the config?
+	uri := fmt.Sprintf("/gorse/?sort-order=%s&user-id=%d&read-state=%s",
+		url.QueryEscape(request.PostForm.Get("sort-order")),
+		userID,
+		url.QueryEscape(readState.String()))
 
 	http.Redirect(rw, request, uri, http.StatusFound)
 }
@@ -583,8 +706,8 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 // package in a goroutine.
 func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	request *http.Request) {
-	log.Printf("Serving new [%s] request from [%s] to path [%s]",
-		request.Method, request.RemoteAddr, request.URL.Path)
+	log.Printf("Serving [%s] request from [%s] to path [%s]", request.Method,
+		request.RemoteAddr, request.URL.Path)
 
 	// Get existing session, or make a new one.
 	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
@@ -595,8 +718,8 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 		return
 	}
 
-	// We need to decide how to parse this request. we do this by looking
-	// at the HTTP method and the path.
+	// We need to decide how to parse this request. We do this by looking at the
+	// HTTP method and the path.
 
 	type RequestHandlerFunc func(http.ResponseWriter, *http.Request,
 		*GorseConfig, *sessions.Session)
@@ -648,16 +771,16 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 
 		if matched {
 			actionHandler.Func(rw, request, handler.settings, session)
-			// NOTE: we don't session.Save() here as if we redirect the Save()
+			// NOTE: We don't session.Save() here as if we redirect the Save()
 			//   won't take effect.
-			// clean up gorilla globals. sessions package says this must be
-			// done or we'll leak memory.
+			// Clean up gorilla globals. Sessions package says this must be done or
+			// we'll leak memory.
 			context.Clear(request)
 			return
 		}
 	}
 
-	// There was no matching handler - send a 404.
+	// There was no matching handler. Send a 404.
 	log.Printf("No handler for this request.")
 	rw.WriteHeader(http.StatusNotFound)
 	_, _ = rw.Write([]byte("<h1>404 Not Found</h1>"))
@@ -668,12 +791,9 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 
-	configPath := flag.String("config", "",
-		"Path to a configuration file.")
-	logPath := flag.String("log-file", "",
-		"Path to a log file.")
-	wwwPath := flag.String("www-path", "",
-		"Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
+	configPath := flag.String("config", "", "Path to a configuration file.")
+	logPath := flag.String("log-file", "", "Path to a log file.")
+	wwwPath := flag.String("www-path", "", "Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
 	flag.Parse()
 
 	if len(*configPath) == 0 {
@@ -692,8 +812,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// open log file.
-	// don't use os.Create() because that truncates.
+	// Open log file. Don't use os.Create() because that truncates.
 	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Printf("Failed to open log file: %s: %s", *logPath, err)
@@ -708,7 +827,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// load up our settings.
 	var settings GorseConfig
 	err = config.GetConfig(*configPath, &settings)
 	if err != nil {
@@ -716,11 +834,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// set up our session store.
 	var sessionStore = sessions.NewCookieStore(
 		[]byte(settings.CookieAuthenticationKey))
 
-	// start listening.
 	var listenHostPort = fmt.Sprintf("%s:%d", settings.ListenHost,
 		settings.ListenPort)
 	listener, err := net.Listen("tcp", listenHostPort)
@@ -734,12 +850,23 @@ func main() {
 		sessionStore: sessionStore,
 	}
 
-	// TODO: this will serve requests forever - should we have a signal
-	//   or a method to cause this to gracefully stop?
-	log.Print("Starting to serve requests.")
+	// This will serve requests forever - should we have a signal or a method to
+	// cause this to gracefully stop?
+	log.Print("Starting to serve requests. (FastCGI)")
 	err = fcgi.Serve(listener, httpHandler)
 	if err != nil {
-		log.Printf("Failed to start serving HTTP: %s", err)
+		log.Printf("Failed to start serving: %s", err)
 		os.Exit(1)
 	}
+}
+
+// Turn read state into the enumerated type in the database (read_state).
+func (s ReadState) String() string {
+	if s == Unread {
+		return "unread"
+	}
+	if s == Read {
+		return "read"
+	}
+	return "read-later"
 }
