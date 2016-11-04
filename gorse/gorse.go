@@ -602,7 +602,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	// Check if we have any items to update. These are in the request key
 	// 'read-item'.
 	readItems, exists := request.PostForm["read-item"]
-	setReadCount := 0
+	readCount := 0
 	if exists {
 		// This is associated with a slice of strings. Each of these is an id we
 		// want to mark as read now.
@@ -615,20 +615,41 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
+			// Record it to the "read after archive" table if it was archived and now
+			// is being flagged read.
+
+			item, err := dbGetItem(db, id)
+			if err != nil {
+				log.Printf("Unable to look up item: %d: %s", id, err)
+				send500Error(rw, "Unable to look up item.")
+				return
+			}
+
+			if item.ReadState == "read-later" {
+				err := dbRecordReadAfterArchive(db, userID, item)
+				if err != nil {
+					log.Printf("Unable to record item read after archive: %d: %s", id, err)
+					send500Error(rw, "Unable to read read after archive.")
+					return
+				}
+			}
+
+			// Flag it read.
+
 			err = setItemReadState(db, id, userID, Read)
 			if err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
 			}
 
-			setReadCount++
+			readCount++
 		}
 	}
 
-	if setReadCount == 1 {
-		log.Printf("Set %d item read.", setReadCount)
+	if readCount == 1 {
+		log.Printf("Set %d item read.", readCount)
 	} else {
-		log.Printf("Set %d items read.", setReadCount)
+		log.Printf("Set %d items read.", readCount)
 	}
 
 	// Set some archived.

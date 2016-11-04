@@ -89,11 +89,11 @@ CREATE TABLE rss_item_archive (
   id INTEGER NOT NULL,
   title VARCHAR NOT NULL,
   description VARCHAR NOT NULL,
-	link VARCHAR NOT NULL,
-	publication_date TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-	rss_feed_id INTEGER NOT NULL REFERENCES rss_feed(id)
-		ON UPDATE CASCADE ON DELETE CASCADE,
-	UNIQUE(rss_feed_id, link)
+  link VARCHAR NOT NULL,
+  publication_date TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  rss_feed_id INTEGER NOT NULL REFERENCES rss_feed(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  UNIQUE(rss_feed_id, link)
 );
 
 
@@ -141,3 +141,26 @@ WHERE
 ri.id IN (SELECT ris.item_id FROM rss_item_state ris WHERE
   ris.item_id = ri.id AND ris.state = 'read') AND
 ri.publication_date < NOW() - '1 months'::INTERVAL;
+
+
+-- Table to hold items we mark read after having archived them. This means
+-- that they were more interesting and were probably clicked and read. Record
+-- them here to be able to refer to them more easily in the future.
+CREATE TABLE rss_item_read_after_archive(
+  id SERIAL NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES rss_user(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  -- I choose to not have these be foreign keys. This is primarily because I
+  -- want to be able to periodically clear out the rss_item table (to keep it
+  -- from getting huge).
+  rss_feed_id INTEGER NOT NULL,
+  rss_item_id INTEGER NOT NULL,
+  create_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  update_time TIMESTAMP WITH TIME ZONE,
+  UNIQUE(user_id, rss_feed_id, rss_item_id),
+  PRIMARY KEY(id)
+);
+
+CREATE TRIGGER bu_rss_item_read_after_archive
+BEFORE UPDATE ON rss_item_read_after_archive
+FOR EACH ROW EXECUTE PROCEDURE trigger_set_update_time();

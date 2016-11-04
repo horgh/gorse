@@ -60,6 +60,7 @@ type RSSFeed struct {
 
 // RSSItem describes an item in a feed.
 type RSSItem struct {
+	FeedID      int64
 	FeedName    string
 	ID          int64
 	Title       string
@@ -70,6 +71,7 @@ type RSSItem struct {
 	URI                   string
 	PublicationDate       time.Time
 	PublicationDateString string
+	ReadState             string
 }
 
 // Item is abstracted from ItemXML and RDFItemXML.
