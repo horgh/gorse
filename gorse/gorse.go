@@ -404,7 +404,6 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// Show the page.
 
 	type ListItemsPage struct {
-		PageTitle        string
 		Items            []gorselib.RSSItem
 		Feeds            []gorselib.RSSFeed
 		SuccessMessages  []string
@@ -422,7 +421,6 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 
 	listItemsPage := ListItemsPage{
-		PageTitle:        "",
 		Items:            items,
 		Feeds:            feeds,
 		SuccessMessages:  successMessages,
