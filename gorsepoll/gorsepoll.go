@@ -108,6 +108,11 @@ func feedItemExists(db *sql.DB, feed *gorselib.RSSFeed,
 		count++
 	}
 
+	err = rows.Err()
+	if err != nil {
+		return false, fmt.Errorf("Failure fetching rows: %s", err)
+	}
+
 	if count > 0 {
 		return true, nil
 	}
@@ -125,6 +130,11 @@ func feedItemExists(db *sql.DB, feed *gorselib.RSSFeed,
 	count = 0
 	for rows.Next() {
 		count++
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return false, fmt.Errorf("Failure fetching rows: %s", err)
 	}
 
 	if count > 0 {

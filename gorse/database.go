@@ -153,10 +153,12 @@ COALESCE(ris.user_id, $2) = $3
 	var items []gorselib.RSSItem
 	for rows.Next() {
 		var item gorselib.RSSItem
+
 		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.URI,
 			&item.Description, &item.PublicationDate)
 		if err != nil {
 			log.Printf("Failed to scan row information: %s", err)
+			_ = rows.Close()
 			return nil, err
 		}
 
@@ -167,15 +169,23 @@ COALESCE(ris.user_id, $2) = $3
 		item.Title, err = gorselib.SanitiseItemText(item.Title)
 		if err != nil {
 			log.Printf("Failed to sanitise title: %s", err)
+			_ = rows.Close()
 			return nil, err
 		}
+
 		item.Description, err = gorselib.SanitiseItemText(item.Description)
 		if err != nil {
 			log.Printf("Failed to sanitise description: %s", err)
+			_ = rows.Close()
 			return nil, err
 		}
 
 		items = append(items, item)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("Failure fetching rows: %s", err)
 	}
 
 	return items, nil

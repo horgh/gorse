@@ -498,6 +498,7 @@ ORDER BY name
 		log.Printf("Failed to query for feeds from the database: %s", err)
 		return nil, err
 	}
+
 	// build our slice of feeds.
 	var feeds []RSSFeed
 	for rows.Next() {
@@ -506,6 +507,7 @@ ORDER BY name
 		var uri string
 		var updateFrequencySeconds int64
 		var lastUpdateTime time.Time
+
 		err := rows.Scan(&id, &name, &uri, &updateFrequencySeconds,
 			&lastUpdateTime)
 		if err != nil {
@@ -513,6 +515,7 @@ ORDER BY name
 			_ = rows.Close()
 			return nil, err
 		}
+
 		var feed = RSSFeed{
 			ID:   id,
 			Name: name,
@@ -520,8 +523,15 @@ ORDER BY name
 			UpdateFrequencySeconds: updateFrequencySeconds,
 			LastUpdateTime:         lastUpdateTime,
 		}
+
 		feeds = append(feeds, feed)
 	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("Failure fetching rows: %s", err)
+	}
+
 	return feeds, nil
 }
 
