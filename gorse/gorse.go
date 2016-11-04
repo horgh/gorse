@@ -322,8 +322,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	userIDStr := requestValues.Get("user-id")
 	if userIDStr == "" {
 		log.Printf("No user ID found")
-		send400Error(rw, "No user ID found.")
-		return
+		// TODO: At this time I have users partially implemented. There is only one
+		//   user really. Default to that user. When we require logins and such this
+		//   will need to change.
+		userIDStr = "1"
 	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
