@@ -2,11 +2,184 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"summercat.com/gorse/gorselib"
 )
+
+// connectToDB opens a new connection to the database.
+func connectToDB(settings *GorseConfig) (*sql.DB, error) {
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
+		settings.DBUser, settings.DBPass, settings.DBName, settings.DBHost)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Printf("Failed to connect to the database: %s", err)
+		return nil, err
+	}
+
+	log.Print("Opened new connection to the database.")
+	return db, nil
+}
+
+// getDB connects us to the database if necessary, and returns an active
+// database connection.
+// we use the global DB variable to try to ensure we use a single connection.
+func getDB(settings *GorseConfig) (*sql.DB, error) {
+	// If we have a db connection, ensure that it is still available so that we
+	// reconnect if it is not.
+	if DB != nil {
+		err := DB.Ping()
+		if err == nil {
+			return DB, nil
+		}
+
+		log.Printf("Database ping failed: %s", err)
+
+		// Continue on, but set us so that we attempt to reconnect.
+		DBLock.Lock()
+		if DB != nil {
+			_ = DB.Close()
+			DB = nil
+		}
+		DBLock.Unlock()
+	}
+
+	DBLock.Lock()
+	defer DBLock.Unlock()
+
+	if DB != nil {
+		return DB, nil
+	}
+
+	db, err := connectToDB(settings)
+	if err != nil {
+		log.Printf("Failed to connect to the database: %s", err)
+		return nil, err
+	}
+
+	// Set global
+	DB = db
+
+	return DB, nil
+}
+
+// dbCountItems retrieves a count of items.
+//
+// This is for pagination.
+func dbCountItems(db *sql.DB, userID int, state ReadState) (int, error) {
+	query := `
+SELECT COUNT(1) AS count
+FROM rss_item ri
+LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+WHERE
+rf.active = true AND
+COALESCE(ris.state, 'unread') = $1 AND
+COALESCE(ris.user_id, $2) = $3
+`
+
+	rows, err := db.Query(query, state.String(), userID, userID)
+	if err != nil {
+		return -1, err
+	}
+
+	if !rows.Next() {
+		return -1, errors.New("Count not found")
+	}
+
+	var count int
+	err = rows.Scan(&count)
+	if err != nil {
+		_ = rows.Close()
+		return -1, err
+	}
+
+	err = rows.Close()
+	if err != nil {
+		return -1, fmt.Errorf("Problem closing rows: %s", err)
+	}
+
+	return count, nil
+}
+
+// dbRetrieveFeedItems retrieves feed items from the database which are marked
+// a given state.
+func dbRetrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
+	page, userID int, state ReadState) ([]gorselib.RSSItem, error) {
+
+	if page < 1 {
+		return nil, errors.New("Invalid page number.")
+	}
+
+	query := `
+SELECT
+rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
+FROM rss_item ri
+LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+WHERE
+rf.active = true AND
+COALESCE(ris.state, 'unread') = $1 AND
+COALESCE(ris.user_id, $2) = $3
+`
+
+	if order == sortAscending {
+		query += "ORDER BY ri.publication_date ASC, rf.name, ri.title"
+	} else {
+		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
+	}
+
+	query += " LIMIT $4 OFFSET $5"
+
+	offset := (page - 1) * pageSize
+
+	rows, err := db.Query(query, state.String(), userID, userID, pageSize, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// our display timezone location.
+	location, err := time.LoadLocation(settings.DisplayTimeZone)
+	if err != nil {
+		log.Printf("Failed to load time zone location [%s]",
+			settings.DisplayTimeZone)
+		return nil, err
+	}
+
+	var items []gorselib.RSSItem
+	for rows.Next() {
+		var item gorselib.RSSItem
+		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.URI,
+			&item.Description, &item.PublicationDate)
+		if err != nil {
+			log.Printf("Failed to scan row information: %s", err)
+			return nil, err
+		}
+
+		// set time to the display timezone.
+		item.PublicationDate = item.PublicationDate.In(location)
+
+		// sanitise the text.
+		item.Title, err = gorselib.SanitiseItemText(item.Title)
+		if err != nil {
+			log.Printf("Failed to sanitise title: %s", err)
+			return nil, err
+		}
+		item.Description, err = gorselib.SanitiseItemText(item.Description)
+		if err != nil {
+			log.Printf("Failed to sanitise description: %s", err)
+			return nil, err
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
 
 // Retrieve an item's information from the database. This includes the item's
 // state for the given user.
