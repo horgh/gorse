@@ -88,6 +88,164 @@ const (
 
 const pageSize = 50
 
+func main() {
+	log.SetFlags(log.Ldate | log.Ltime)
+
+	configPath := flag.String("config", "", "Path to a configuration file.")
+	logPath := flag.String("log-file", "", "Path to a log file.")
+	wwwPath := flag.String("www-path", "", "Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
+	flag.Parse()
+
+	if len(*configPath) == 0 {
+		log.Print("You must specify a configuration file.")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	if len(*logPath) == 0 {
+		log.Print("You must specify a log file.")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	if len(*wwwPath) == 0 {
+		log.Print("You must specify a www path.")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	// Open log file. Don't use os.Create() because that truncates.
+	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		log.Printf("Failed to open log file: %s: %s", *logPath, err)
+		os.Exit(1)
+	}
+	log.SetOutput(logFh)
+
+	// chdir to the www path so we can get what we need to serve up.
+	err = os.Chdir(*wwwPath)
+	if err != nil {
+		log.Printf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
+		os.Exit(1)
+	}
+
+	var settings GorseConfig
+	err = config.GetConfig(*configPath, &settings)
+	if err != nil {
+		log.Printf("Failed to retrieve config: %s", err)
+		os.Exit(1)
+	}
+
+	var sessionStore = sessions.NewCookieStore(
+		[]byte(settings.CookieAuthenticationKey))
+
+	var listenHostPort = fmt.Sprintf("%s:%d", settings.ListenHost,
+		settings.ListenPort)
+	listener, err := net.Listen("tcp", listenHostPort)
+	if err != nil {
+		log.Printf("Failed to open port: %s", err)
+		os.Exit(1)
+	}
+
+	var httpHandler = HTTPHandler{
+		settings:     &settings,
+		sessionStore: sessionStore,
+	}
+
+	// This will serve requests forever - should we have a signal or a method to
+	// cause this to gracefully stop?
+	log.Print("Starting to serve requests. (FastCGI)")
+	err = fcgi.Serve(listener, httpHandler)
+	if err != nil {
+		log.Printf("Failed to start serving: %s", err)
+		os.Exit(1)
+	}
+}
+
+// ServeHTTP handles an http request. it is invoked by the fastcgi
+// package in a goroutine.
+func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
+	request *http.Request) {
+	log.Printf("Serving [%s] request from [%s] to path [%s]", request.Method,
+		request.RemoteAddr, request.URL.Path)
+
+	// Get existing session, or make a new one.
+	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
+	if err != nil {
+		log.Printf("Session Get error: %s", err)
+		send500Error(rw, "Failed to get your session.")
+		context.Clear(request)
+		return
+	}
+
+	// We need to decide how to parse this request. We do this by looking at the
+	// HTTP method and the path.
+
+	type RequestHandlerFunc func(http.ResponseWriter, *http.Request,
+		*GorseConfig, *sessions.Session)
+
+	type RequestHandler struct {
+		Method string
+
+		// Regex pattern on the path to match.
+		PathPattern string
+
+		Func RequestHandlerFunc
+	}
+
+	var handlers = []RequestHandler{
+		// GET /
+		RequestHandler{
+			Method:      "GET",
+			PathPattern: "^" + handler.settings.URIPrefix + "/?$",
+			Func:        handlerListItems,
+		},
+
+		// POST /update_read_flags
+		RequestHandler{
+			Method:      "POST",
+			PathPattern: "^" + handler.settings.URIPrefix + "/update_read_flags/?$",
+			Func:        handlerUpdateReadFlags,
+		},
+
+		// GET /static/*
+		RequestHandler{
+			Method:      "GET",
+			PathPattern: "^" + handler.settings.URIPrefix + "/static/",
+			Func:        handlerStaticFiles,
+		},
+	}
+
+	// Find a matching handler.
+	for _, actionHandler := range handlers {
+		if actionHandler.Method != request.Method {
+			continue
+		}
+
+		matched, err := regexp.MatchString(actionHandler.PathPattern,
+			request.URL.Path)
+		if err != nil {
+			log.Printf("Error matching regex: %s", err)
+			continue
+		}
+
+		if matched {
+			actionHandler.Func(rw, request, handler.settings, session)
+			// NOTE: We don't session.Save() here as if we redirect the Save()
+			//   won't take effect.
+			// Clean up gorilla globals. Sessions package says this must be done or
+			// we'll leak memory.
+			context.Clear(request)
+			return
+		}
+	}
+
+	// There was no matching handler. Send a 404.
+	log.Printf("No handler for this request.")
+	rw.WriteHeader(http.StatusNotFound)
+	_, _ = rw.Write([]byte("<h1>404 Not Found</h1>"))
+	_ = session.Save(request, rw)
+	context.Clear(request)
+}
+
 // send400Error sends a bad request error with the given message in the body.
 func send400Error(rw http.ResponseWriter, message string) {
 	rw.WriteHeader(http.StatusBadRequest)
@@ -99,6 +257,17 @@ func send400Error(rw http.ResponseWriter, message string) {
 func send500Error(rw http.ResponseWriter, message string) {
 	rw.WriteHeader(http.StatusInternalServerError)
 	_, _ = rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
+}
+
+// Turn read state into the enumerated type in the database (read_state).
+func (s ReadState) String() string {
+	if s == Unread {
+		return "unread"
+	}
+	if s == Read {
+		return "read"
+	}
+	return "read-later"
 }
 
 // handlerListItems handles a list rss items request and builds an html
@@ -447,173 +616,4 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	var strippedHandler = http.StripPrefix(settings.URIPrefix+"/static/",
 		fileserverHandler)
 	strippedHandler.ServeHTTP(rw, request)
-}
-
-// ServeHTTP handles an http request. it is invoked by the fastcgi
-// package in a goroutine.
-func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
-	request *http.Request) {
-	log.Printf("Serving [%s] request from [%s] to path [%s]", request.Method,
-		request.RemoteAddr, request.URL.Path)
-
-	// Get existing session, or make a new one.
-	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
-	if err != nil {
-		log.Printf("Session Get error: %s", err)
-		send500Error(rw, "Failed to get your session.")
-		context.Clear(request)
-		return
-	}
-
-	// We need to decide how to parse this request. We do this by looking at the
-	// HTTP method and the path.
-
-	type RequestHandlerFunc func(http.ResponseWriter, *http.Request,
-		*GorseConfig, *sessions.Session)
-
-	type RequestHandler struct {
-		Method string
-
-		// Regex pattern on the path to match.
-		PathPattern string
-
-		Func RequestHandlerFunc
-	}
-
-	var handlers = []RequestHandler{
-		// GET /
-		RequestHandler{
-			Method:      "GET",
-			PathPattern: "^" + handler.settings.URIPrefix + "/?$",
-			Func:        handlerListItems,
-		},
-
-		// POST /update_read_flags
-		RequestHandler{
-			Method:      "POST",
-			PathPattern: "^" + handler.settings.URIPrefix + "/update_read_flags/?$",
-			Func:        handlerUpdateReadFlags,
-		},
-
-		// GET /static/*
-		RequestHandler{
-			Method:      "GET",
-			PathPattern: "^" + handler.settings.URIPrefix + "/static/",
-			Func:        handlerStaticFiles,
-		},
-	}
-
-	// Find a matching handler.
-	for _, actionHandler := range handlers {
-		if actionHandler.Method != request.Method {
-			continue
-		}
-
-		matched, err := regexp.MatchString(actionHandler.PathPattern,
-			request.URL.Path)
-		if err != nil {
-			log.Printf("Error matching regex: %s", err)
-			continue
-		}
-
-		if matched {
-			actionHandler.Func(rw, request, handler.settings, session)
-			// NOTE: We don't session.Save() here as if we redirect the Save()
-			//   won't take effect.
-			// Clean up gorilla globals. Sessions package says this must be done or
-			// we'll leak memory.
-			context.Clear(request)
-			return
-		}
-	}
-
-	// There was no matching handler. Send a 404.
-	log.Printf("No handler for this request.")
-	rw.WriteHeader(http.StatusNotFound)
-	_, _ = rw.Write([]byte("<h1>404 Not Found</h1>"))
-	_ = session.Save(request, rw)
-	context.Clear(request)
-}
-
-func main() {
-	log.SetFlags(log.Ldate | log.Ltime)
-
-	configPath := flag.String("config", "", "Path to a configuration file.")
-	logPath := flag.String("log-file", "", "Path to a log file.")
-	wwwPath := flag.String("www-path", "", "Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
-	flag.Parse()
-
-	if len(*configPath) == 0 {
-		log.Print("You must specify a configuration file.")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-	if len(*logPath) == 0 {
-		log.Print("You must specify a log file.")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-	if len(*wwwPath) == 0 {
-		log.Print("You must specify a www path.")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	// Open log file. Don't use os.Create() because that truncates.
-	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		log.Printf("Failed to open log file: %s: %s", *logPath, err)
-		os.Exit(1)
-	}
-	log.SetOutput(logFh)
-
-	// chdir to the www path so we can get what we need to serve up.
-	err = os.Chdir(*wwwPath)
-	if err != nil {
-		log.Printf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
-		os.Exit(1)
-	}
-
-	var settings GorseConfig
-	err = config.GetConfig(*configPath, &settings)
-	if err != nil {
-		log.Printf("Failed to retrieve config: %s", err)
-		os.Exit(1)
-	}
-
-	var sessionStore = sessions.NewCookieStore(
-		[]byte(settings.CookieAuthenticationKey))
-
-	var listenHostPort = fmt.Sprintf("%s:%d", settings.ListenHost,
-		settings.ListenPort)
-	listener, err := net.Listen("tcp", listenHostPort)
-	if err != nil {
-		log.Printf("Failed to open port: %s", err)
-		os.Exit(1)
-	}
-
-	var httpHandler = HTTPHandler{
-		settings:     &settings,
-		sessionStore: sessionStore,
-	}
-
-	// This will serve requests forever - should we have a signal or a method to
-	// cause this to gracefully stop?
-	log.Print("Starting to serve requests. (FastCGI)")
-	err = fcgi.Serve(listener, httpHandler)
-	if err != nil {
-		log.Printf("Failed to start serving: %s", err)
-		os.Exit(1)
-	}
-}
-
-// Turn read state into the enumerated type in the database (read_state).
-func (s ReadState) String() string {
-	if s == Unread {
-		return "unread"
-	}
-	if s == Read {
-		return "read"
-	}
-	return "read-later"
 }
