@@ -146,25 +146,6 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 	return DB, nil
 }
 
-// setItemReadState sets the given item's state in the database.
-func setItemReadState(db *sql.DB, id int64, userID int, state ReadState) error {
-	// Upsert.
-	query := `
-INSERT INTO rss_item_state
-(user_id, item_id, state)
-VALUES($1, $2, $3)
-ON CONFLICT (user_id, item_id) DO UPDATE
-SET state = $4
-`
-	_, err := db.Exec(query, userID, id, state.String(), state.String())
-	if err != nil {
-		log.Printf("Failed to set item id [%d] read: %s", id, err)
-		return err
-	}
-	log.Printf("Set item id [%d] %s", id, state)
-	return nil
-}
-
 // countItems retrieves a count of items.
 //
 // This is for pagination.
@@ -618,7 +599,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 			// Record it to the "read after archive" table if it was archived and now
 			// is being flagged read.
 
-			item, err := dbGetItem(db, id)
+			item, err := dbGetItem(db, id, userID)
 			if err != nil {
 				log.Printf("Unable to look up item: %d: %s", id, err)
 				send500Error(rw, "Unable to look up item.")
@@ -636,7 +617,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 
 			// Flag it read.
 
-			err = setItemReadState(db, id, userID, Read)
+			err = dbSetItemReadState(db, id, userID, Read)
 			if err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
@@ -666,7 +647,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
-			err = setItemReadState(db, id, userID, ReadLater)
+			err = dbSetItemReadState(db, id, userID, ReadLater)
 			if err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
