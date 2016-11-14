@@ -18,9 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"code.google.com/p/go-charset/charset"
-	// go-charset: for charset conversion
-	_ "code.google.com/p/go-charset/data"
+	"golang.org/x/net/html/charset"
 )
 
 // Config controls package wide settings.
@@ -310,7 +308,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 
 	decoder := xml.NewDecoder(byteReader)
 
-	decoder.CharsetReader = charset.NewReader
+	decoder.CharsetReader = charset.NewReaderLabel
 
 	err := decoder.Decode(&rssXML)
 	if err != nil {
@@ -359,7 +357,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 
 	byteReader := bytes.NewBuffer(data)
 	decoder := xml.NewDecoder(byteReader)
-	decoder.CharsetReader = charset.NewReader
+	decoder.CharsetReader = charset.NewReaderLabel
 
 	err := decoder.Decode(&rdfXML)
 	if err != nil {
