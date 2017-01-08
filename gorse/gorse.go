@@ -27,9 +27,9 @@ import (
 
 	"github.com/gorilla/context"
 	"github.com/gorilla/sessions"
+	"github.com/horgh/config"
+	"github.com/horgh/gorse/gorselib"
 	_ "github.com/lib/pq"
-	"summercat.com/config"
-	"summercat.com/gorse/gorselib"
 )
 
 // GorseConfig holds runtime configuration information.

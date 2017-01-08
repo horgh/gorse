@@ -27,9 +27,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/horgh/config"
+	"github.com/horgh/gorse/gorselib"
 	_ "github.com/lib/pq"
-	"summercat.com/config"
-	"summercat.com/gorse/gorselib"
 )
 
 // Config holds runtime configuration info.

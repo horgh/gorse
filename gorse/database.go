@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"summercat.com/gorse/gorselib"
+	"github.com/horgh/gorse/gorselib"
 )
 
 // connectToDB opens a new connection to the database.
