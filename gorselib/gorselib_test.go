@@ -85,14 +85,12 @@ func TestParseAsRDF(t *testing.T) {
 						Link:        "https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 						Description: "Seattle's landmark law that lets drivers",
 						PubDate:     "2017-01-17T20:40:00+00:00",
-						GUID:        "https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 					},
 					Item{
 						Title:       "Netflix is 'Killing' DVD Sales, Research Finds",
 						Link:        "https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 						Description: "Netflix has become the go-to destination for many movie",
 						PubDate:     "2017-01-17T20:00:00+00:00",
-						GUID:        "https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 					},
 				},
 			},
@@ -175,14 +173,12 @@ func TestParseAsAtom(t *testing.T) {
 						Link:        "http://www.example.com/test-entry-1",
 						Description: "<p>Testing content 1</p>",
 						PubDate:     "2017-01-11T00:00:00-05:00",
-						GUID:        "http://www.example.com/test-entry-1-id",
 					},
 					Item{
 						Title:       "Test title 2",
 						Link:        "http://www.example.com/test-entry-2",
 						Description: "<p>Testing content 2</p>",
 						PubDate:     "2017-01-12T00:00:00-05:00",
-						GUID:        "http://www.example.com/test-entry-2-id",
 					},
 				},
 			},
@@ -259,10 +255,6 @@ func channelEqual(a, b *Channel) error {
 
 		if ai.PubDate != bi.PubDate {
 			return fmt.Errorf("item %d pubdate mismatch", i)
-		}
-
-		if ai.GUID != bi.GUID {
-			return fmt.Errorf("item %d guid mismatch", i)
 		}
 	}
 

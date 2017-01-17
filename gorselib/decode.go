@@ -28,10 +28,9 @@ type Item struct {
 	Link        string
 	Description string
 	PubDate     string
-	GUID        string
 }
 
-// rssXML is used for parsing RSS.
+// rssXML is used for parsing/encoding RSS.
 type rssXML struct {
 	// If xml.Name is specified and has a tag name, we must have this element as
 	// the root. I don't do this though because it is case sensitive. Instead,
@@ -41,7 +40,7 @@ type rssXML struct {
 	Version string        `xml:"version,attr"`
 }
 
-// rssChannelXML is used for parsing RSS.
+// rssChannelXML is used for parsing/encoding RSS.
 type rssChannelXML struct {
 	XMLName       xml.Name     `xml:"channel"`
 	Title         string       `xml:"title"`
@@ -52,14 +51,15 @@ type rssChannelXML struct {
 	Items         []rssItemXML `xml:"item"`
 }
 
-// rssItemXML is used for parsing RSS.
+// rssItemXML is used for parsing/encoding RSS.
 type rssItemXML struct {
 	XMLName     xml.Name `xml:"item"`
 	Title       string   `xml:"title"`
 	Link        string   `xml:"link"`
 	Description string   `xml:"description"`
 	PubDate     string   `xml:"pubDate"`
-	GUID        string   `xml:"guid"`
+	// I use GUID when writing out RSS, but otherwise not.
+	GUID string `xml:"guid"`
 }
 
 // rdfXML is used for parsing RDF.
@@ -102,10 +102,6 @@ type atomXML struct {
 	// Web resource. Zero or more. Feeds should contain with with rel=self.
 	Links []atomLink `xml:"link"`
 
-	// ID must be present and must be an IRI. Unique but might not be a web
-	// resource.
-	ID string `xml:"id"`
-
 	// Last time feed was updated.
 	Updated string `xml:"updated"`
 
@@ -126,10 +122,6 @@ type atomItemXML struct {
 
 	// Web resource. Zero or more.
 	Links []atomLink `xml:"link"`
-
-	// ID must be present and must be an IRI. Unique but might not be a web
-	// resource.
-	ID string `xml:"id"`
 
 	// Last time entry updated. Must be present.
 	Updated string `xml:"updated"`
@@ -241,7 +233,6 @@ func parseAsRSS(data []byte) (*Channel, error) {
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
-				GUID:        item.GUID,
 			})
 	}
 
@@ -290,7 +281,6 @@ func parseAsRDF(data []byte) (*Channel, error) {
 				Link:        item.Link,
 				Description: item.Description,
 				PubDate:     item.PubDate,
-				GUID:        item.Link,
 			})
 	}
 
@@ -346,7 +336,6 @@ func parseAsAtom(data []byte) (*Channel, error) {
 				Link:        link,
 				Description: item.Content,
 				PubDate:     item.Updated,
-				GUID:        item.ID,
 			})
 	}
 
