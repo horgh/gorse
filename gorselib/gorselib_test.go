@@ -5,6 +5,127 @@ import (
 	"testing"
 )
 
+func TestParseAsRDF(t *testing.T) {
+	tests := []struct {
+		input   string
+		output  *Channel
+		success bool
+	}{
+		{
+			// An edited/subset version of a feed from Slashdot.
+			`<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="text/xsl" media="screen" href="/~d/styles/rss1full.xsl"?><?xml-stylesheet type="text/css" media="screen" href="http://rss.slashdot.org/~d/styles/itemcontent.css"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:slash="http://purl.org/rss/1.0/modules/slash/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:taxo="http://purl.org/rss/1.0/modules/taxonomy/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:syn="http://purl.org/rss/1.0/modules/syndication/" xmlns:admin="http://webns.net/mvcb/">
+
+<channel rdf:about="https://slashdot.org/">
+<title>Slashdot</title>
+<link>https://slashdot.org/</link>
+<description>News for nerds, stuff that matters</description>
+<dc:language>en-us</dc:language>
+<dc:rights>Copyright 1997-2016, SlashdotMedia. All Rights Reserved.</dc:rights>
+<dc:date>2017-01-17T21:30:14+00:00</dc:date>
+<dc:publisher>Dice</dc:publisher>
+<dc:creator>help@slashdot.org</dc:creator>
+<dc:subject>Technology</dc:subject>
+<syn:updateBase>1970-01-01T00:00+00:00</syn:updateBase>
+<syn:updateFrequency>1</syn:updateFrequency>
+<syn:updatePeriod>hourly</syn:updatePeriod>
+<items>
+ <rdf:Seq>
+  <rdf:li rdf:resource="https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed" />
+  <rdf:li rdf:resource="https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed" />
+ </rdf:Seq>
+</items>
+
+<image rdf:resource="http://a.fsdn.com/sd/topics/topicslashdot.gif" />
+<textinput rdf:resource="https://slashdot.org/search.pl" />
+<atom10:link xmlns:atom10="http://www.w3.org/2005/Atom" rel="self" type="application/rdf+xml" href="http://rss.slashdot.org/slashdot/slashdotMain" /><feedburner:info xmlns:feedburner="http://rssnamespace.org/feedburner/ext/1.0" uri="slashdot/slashdotmain" /><atom10:link xmlns:atom10="http://www.w3.org/2005/Atom" rel="hub" href="http://pubsubhubbub.appspot.com/" />
+</channel>
+
+<image rdf:about="http://a.fsdn.com/sd/topics/topicslashdot.gif">
+<title>Slashdot</title>
+<url>http://a.fsdn.com/sd/topics/topicslashdot.gif</url>
+<link>https://slashdot.org/</link>
+</image>
+
+<item rdf:about="https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed">
+<title>Uber Sues City of Seattle To Block Landmark Driver Union Ordinance</title>
+<link>https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed</link>
+<description>Seattle's landmark law that lets drivers</description>
+<dc:creator>msmash</dc:creator>
+<dc:date>2017-01-17T20:40:00+00:00</dc:date>
+<dc:subject>transportation</dc:subject>
+<slash:department>tussle-continues</slash:department>
+<slash:section>technology</slash:section>
+<slash:comments>42</slash:comments>
+<slash:hit_parade>42,42,27,22,3,0,0</slash:hit_parade>
+</item>
+<item rdf:about="https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed">
+<title>Netflix is 'Killing' DVD Sales, Research Finds</title>
+<link>https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&amp;utm_medium=feed</link>
+<description>Netflix has become the go-to destination for many movie</description>
+<dc:creator>msmash</dc:creator>
+<dc:date>2017-01-17T20:00:00+00:00</dc:date>
+<dc:subject>movies</dc:subject>
+<slash:department>how-things-work</slash:department>
+<slash:section>entertainment</slash:section>
+<slash:comments>101</slash:comments>
+<slash:hit_parade>101,100,66,55,17,8,2</slash:hit_parade>
+</item>
+</rdf:RDF>
+`,
+			&Channel{
+				Title:         "Slashdot",
+				Link:          "https://slashdot.org/",
+				Description:   "News for nerds, stuff that matters",
+				PubDate:       "2017-01-17T21:30:14+00:00",
+				LastBuildDate: "",
+				Items: []Item{
+					Item{
+						Title:       "Uber Sues City of Seattle To Block Landmark Driver Union Ordinance",
+						Link:        "https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&utm_medium=feed",
+						Description: "Seattle's landmark law that lets drivers",
+						PubDate:     "2017-01-17T20:40:00+00:00",
+						GUID:        "https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&utm_medium=feed",
+					},
+					Item{
+						Title:       "Netflix is 'Killing' DVD Sales, Research Finds",
+						Link:        "https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&utm_medium=feed",
+						Description: "Netflix has become the go-to destination for many movie",
+						PubDate:     "2017-01-17T20:00:00+00:00",
+						GUID:        "https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&utm_medium=feed",
+					},
+				},
+			},
+			true,
+		},
+	}
+
+	for _, test := range tests {
+		ch, err := parseAsRDF([]byte(test.input))
+		if err != nil {
+			if !test.success {
+				continue
+			}
+
+			t.Errorf("parseAsAtom(%s) = error %s, wanted success", test.input, err)
+			continue
+		}
+
+		if !test.success {
+			t.Errorf("parseAsAtom(%s) = success, wanted error", test.input)
+			continue
+		}
+
+		err = channelEqual(ch, test.output)
+		if err != nil {
+			t.Errorf("parseAsAtom(%s): %s", test.input, err)
+			t.Errorf("Got:    %#v", ch)
+			t.Errorf("Wanted: %#v", test.output)
+			continue
+		}
+	}
+}
+
 func TestParseAsAtom(t *testing.T) {
 	tests := []struct {
 		input   string

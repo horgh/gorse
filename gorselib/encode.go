@@ -24,7 +24,7 @@ import (
 func WriteFeedXML(feed *RSSFeed, filename string) error {
 	// Top level element. Version is required. We use 2.0 even though we are
 	// generating 2.0.1 as that, it seems, is the spec.
-	rss := RSSXML{
+	rss := rssXML{
 		Version: "2.0",
 	}
 	rss.XMLName.Local = "rss"
@@ -52,7 +52,7 @@ func WriteFeedXML(feed *RSSFeed, filename string) error {
 	//     <pubDate/> When the item was published
 	//     <guid/> Arbitrary string unique to the item
 	for _, item := range feed.Items {
-		itemXML := ItemXML{
+		itemXML := rssItemXML{
 			Title:       item.Title,
 			Link:        item.URI,
 			Description: item.Description,
