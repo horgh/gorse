@@ -10,7 +10,7 @@ import (
 func TestParseAsRDF(t *testing.T) {
 	tests := []struct {
 		input   string
-		output  *Channel
+		output  *Feed
 		success bool
 	}{
 		{
@@ -75,7 +75,7 @@ func TestParseAsRDF(t *testing.T) {
 </item>
 </rdf:RDF>
 `,
-			&Channel{
+			&Feed{
 				Title:       "Slashdot",
 				Link:        "https://slashdot.org/",
 				Description: "News for nerds, stuff that matters",
@@ -100,7 +100,7 @@ func TestParseAsRDF(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ch, err := parseAsRDF([]byte(test.input))
+		feed, err := parseAsRDF([]byte(test.input))
 		if err != nil {
 			if !test.success {
 				continue
@@ -115,10 +115,10 @@ func TestParseAsRDF(t *testing.T) {
 			continue
 		}
 
-		err = channelEqual(ch, test.output)
+		err = feedEqual(feed, test.output)
 		if err != nil {
 			t.Errorf("parseAsAtom(%s): %s", test.input, err)
-			t.Errorf("Got:    %#v", ch)
+			t.Errorf("Got:    %#v", feed)
 			t.Errorf("Wanted: %#v", test.output)
 			continue
 		}
@@ -128,7 +128,7 @@ func TestParseAsRDF(t *testing.T) {
 func TestParseAsAtom(t *testing.T) {
 	tests := []struct {
 		input   string
-		output  *Channel
+		output  *Feed
 		success bool
 	}{
 		{
@@ -162,7 +162,7 @@ func TestParseAsAtom(t *testing.T) {
 </entry>
 </feed>
 `,
-			&Channel{
+			&Feed{
 				Title:       "Test one two",
 				Link:        "http://www.example.com/atom.xml",
 				Description: "",
@@ -187,7 +187,7 @@ func TestParseAsAtom(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ch, err := parseAsAtom([]byte(test.input))
+		feed, err := parseAsAtom([]byte(test.input))
 		if err != nil {
 			if !test.success {
 				continue
@@ -202,35 +202,35 @@ func TestParseAsAtom(t *testing.T) {
 			continue
 		}
 
-		err = channelEqual(ch, test.output)
+		err = feedEqual(feed, test.output)
 		if err != nil {
 			t.Errorf("parseAsAtom(%s): %s", test.input, err)
-			t.Errorf("Got:    %#v", ch)
+			t.Errorf("Got:    %#v", feed)
 			t.Errorf("Wanted: %#v", test.output)
 			continue
 		}
 	}
 }
 
-func channelEqual(a, b *Channel) error {
+func feedEqual(a, b *Feed) error {
 	if a.Title != b.Title {
-		return fmt.Errorf("channel title mismatch")
+		return fmt.Errorf("feed title mismatch")
 	}
 
 	if a.Link != b.Link {
-		return fmt.Errorf("channel link mismatch")
+		return fmt.Errorf("feed link mismatch")
 	}
 
 	if a.Description != b.Description {
-		return fmt.Errorf("channel description")
+		return fmt.Errorf("feed description mismatch")
 	}
 
 	if a.PubDate != b.PubDate {
-		return fmt.Errorf("channel pubdate mismatch")
+		return fmt.Errorf("feed pubdate mismatch")
 	}
 
 	if len(a.Items) != len(b.Items) {
-		return fmt.Errorf("channel items count mismatch")
+		return fmt.Errorf("feed items count mismatch")
 	}
 
 	for i := range a.Items {

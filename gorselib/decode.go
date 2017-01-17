@@ -12,8 +12,8 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-// Channel contains a feed parsed from any format.
-type Channel struct {
+// Feed contains a feed parsed from any format.
+type Feed struct {
 	Title       string
 	Link        string
 	Description string
@@ -129,7 +129,7 @@ type atomItemXML struct {
 // ParseFeedXML takes the raw XML and returns a struct describing the feed.
 //
 // We support various formats. Try our best to decode the feed.
-func ParseFeedXML(data []byte) (*Channel, error) {
+func ParseFeedXML(data []byte) (*Feed, error) {
 	// It is possible for us to not have valid XML. In such a case, the XML
 	// Decode function will not always complain. One way for this to happen is if
 	// you do not specify what tag the XML must start with.
@@ -174,7 +174,7 @@ func looksLikeXML(data []byte) error {
 }
 
 // parseAsRSS attempts to parse the buffer as if it contains an RSS feed.
-func parseAsRSS(data []byte) (*Channel, error) {
+func parseAsRSS(data []byte) (*Feed, error) {
 	// Decode from XML.
 
 	// To see how Unmarshal() works, refer to the documentation. Basically we
@@ -210,7 +210,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 
 	// Build a channel struct now. It's common to the base formats we support.
 
-	ch := &Channel{
+	feed := &Feed{
 		Title:       rssXML.Channel.Title,
 		Link:        rssXML.Channel.Link,
 		Description: rssXML.Channel.Description,
@@ -218,11 +218,11 @@ func parseAsRSS(data []byte) (*Channel, error) {
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as RSS [%s]", ch.Title)
+		log.Printf("Parsed channel as RSS [%s]", feed.Title)
 	}
 
 	for _, item := range rssXML.Channel.Items {
-		ch.Items = append(ch.Items,
+		feed.Items = append(feed.Items,
 			Item{
 				Title:       item.Title,
 				Link:        item.Link,
@@ -231,13 +231,13 @@ func parseAsRSS(data []byte) (*Channel, error) {
 			})
 	}
 
-	return ch, nil
+	return feed, nil
 }
 
 // parseAsRDF attempts to parse the buffer as if it contains an RDF feed.
 //
 // See parseAsRSS() for a similar function, but for RSS.
-func parseAsRDF(data []byte) (*Channel, error) {
+func parseAsRDF(data []byte) (*Feed, error) {
 	rdfXML := rdfXML{}
 
 	byteReader := bytes.NewBuffer(data)
@@ -258,7 +258,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 		link = rdfXML.Channel.Links[0]
 	}
 
-	ch := &Channel{
+	feed := &Feed{
 		Title:       rdfXML.Channel.Title,
 		Link:        link,
 		Description: rdfXML.Channel.Description,
@@ -266,11 +266,11 @@ func parseAsRDF(data []byte) (*Channel, error) {
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as RDF [%s]", ch.Title)
+		log.Printf("Parsed channel as RDF [%s]", feed.Title)
 	}
 
 	for _, item := range rdfXML.RDFItems {
-		ch.Items = append(ch.Items,
+		feed.Items = append(feed.Items,
 			Item{
 				Title:       item.Title,
 				Link:        item.Link,
@@ -279,14 +279,14 @@ func parseAsRDF(data []byte) (*Channel, error) {
 			})
 	}
 
-	return ch, nil
+	return feed, nil
 }
 
 // parseAsAtom attempts to parse the buffer as Atom.
 //
 // See parseAsRSS() and parseAsRDF() for similar parsing. Also I omit comments
 // that would be repeated here if they are in those functions.
-func parseAsAtom(data []byte) (*Channel, error) {
+func parseAsAtom(data []byte) (*Feed, error) {
 	atomXML := atomXML{}
 
 	byteReader := bytes.NewBuffer(data)
@@ -308,14 +308,14 @@ func parseAsAtom(data []byte) (*Channel, error) {
 		break
 	}
 
-	ch := &Channel{
+	feed := &Feed{
 		Title:   atomXML.Title,
 		Link:    link,
 		PubDate: atomXML.Updated,
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as Atom [%s]", ch.Title)
+		log.Printf("Parsed channel as Atom [%s]", feed.Title)
 	}
 
 	for _, item := range atomXML.Items {
@@ -325,7 +325,7 @@ func parseAsAtom(data []byte) (*Channel, error) {
 			link = item.Links[0].Href
 		}
 
-		ch.Items = append(ch.Items,
+		feed.Items = append(feed.Items,
 			Item{
 				Title:       item.Title,
 				Link:        link,
@@ -334,7 +334,7 @@ func parseAsAtom(data []byte) (*Channel, error) {
 			})
 	}
 
-	return ch, nil
+	return feed, nil
 }
 
 // GetItemPubDate tries to retrieve a publication date for the item.

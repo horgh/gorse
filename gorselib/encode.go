@@ -22,8 +22,8 @@ import (
 //   <channel> Info about the feed, and its items
 type outXML struct {
 	XMLName xml.Name      `xml:"rss"`
-	Channel outChannelXML `xml:"channel"`
 	Version string        `xml:"version,attr"`
+	Channel outChannelXML `xml:"channel"`
 }
 
 // <channel>
@@ -32,7 +32,6 @@ type outXML struct {
 //   <description>   Phrase describing the channel
 //   <pubDate>       Publication date for the content
 //   <lastBuildDate> Last time content of channel changed
-
 type outChannelXML struct {
 	Title         string       `xml:"title"`
 	Link          string       `xml:"link"`
