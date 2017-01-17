@@ -215,7 +215,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 
 	// Build a channel struct now. It's common to the base formats we support.
 
-	channel := Channel{
+	ch := &Channel{
 		Title:         rssXML.Channel.Title,
 		Link:          rssXML.Channel.Link,
 		Description:   rssXML.Channel.Description,
@@ -224,13 +224,13 @@ func parseAsRSS(data []byte) (*Channel, error) {
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as RSS [%s]", channel.Title)
+		log.Printf("Parsed channel as RSS [%s]", ch.Title)
 	}
 
 	// TODO: Should we report if there are as an error?
 
 	for _, item := range rssXML.Channel.Items {
-		channel.Items = append(channel.Items,
+		ch.Items = append(ch.Items,
 			Item{
 				Title:       item.Title,
 				Link:        item.Link,
@@ -240,7 +240,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 			})
 	}
 
-	return &channel, nil
+	return ch, nil
 }
 
 // parseAsRDF attempts to parse the buffer as if it contains an RDF feed.
@@ -264,7 +264,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 
 	// TODO: Does RDF have all of these fields?
 
-	channel := Channel{
+	ch := &Channel{
 		Title:         rdfXML.Channel.Title,
 		Link:          rdfXML.Channel.Link,
 		Description:   rdfXML.Channel.Description,
@@ -273,11 +273,11 @@ func parseAsRDF(data []byte) (*Channel, error) {
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as RDF [%s]", channel.Title)
+		log.Printf("Parsed channel as RDF [%s]", ch.Title)
 	}
 
 	for _, item := range rdfXML.RDFItems {
-		channel.Items = append(channel.Items,
+		ch.Items = append(ch.Items,
 			Item{
 				Title:       item.Title,
 				Link:        item.Link,
@@ -287,7 +287,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 			})
 	}
 
-	return &channel, nil
+	return ch, nil
 }
 
 // parseAsAtom attempts to parse the buffer as Atom.
@@ -316,14 +316,14 @@ func parseAsAtom(data []byte) (*Channel, error) {
 		break
 	}
 
-	channel := &Channel{
+	ch := &Channel{
 		Title:   atomXML.Title,
 		Link:    link,
 		PubDate: atomXML.Updated,
 	}
 
 	if !config.Quiet {
-		log.Printf("Parsed channel as Atom [%s]", channel.Title)
+		log.Printf("Parsed channel as Atom [%s]", ch.Title)
 	}
 
 	for _, item := range atomXML.Items {
@@ -333,7 +333,7 @@ func parseAsAtom(data []byte) (*Channel, error) {
 			link = item.Links[0].Href
 		}
 
-		channel.Items = append(channel.Items,
+		ch.Items = append(ch.Items,
 			Item{
 				Title:       item.Title,
 				Link:        link,
@@ -343,7 +343,7 @@ func parseAsAtom(data []byte) (*Channel, error) {
 			})
 	}
 
-	return channel, nil
+	return ch, nil
 }
 
 // GetItemPubDate tries to retrieve a publication date for the item.

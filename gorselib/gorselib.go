@@ -25,7 +25,8 @@ var config = Config{
 	Quiet: false,
 }
 
-// RSSFeed describes a feed.
+// RSSFeed describes a feed. This is the type that callers will generally work
+// with if the input/output format is not important.
 type RSSFeed struct {
 	// Database id of the feed.
 	ID int64
@@ -48,7 +49,8 @@ type RSSFeed struct {
 	Items []RSSItem
 }
 
-// RSSItem describes an item in a feed.
+// RSSItem describes an item in a feed. This is the type that callers will
+// generally work with if the input/output format is not important.
 type RSSItem struct {
 	FeedID      int64
 	FeedName    string
