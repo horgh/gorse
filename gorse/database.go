@@ -88,7 +88,7 @@ COALESCE(ris.user_id, $2) = $3
 	}
 
 	if !rows.Next() {
-		return -1, errors.New("Count not found")
+		return -1, errors.New("count not found")
 	}
 
 	var count int
@@ -100,7 +100,7 @@ COALESCE(ris.user_id, $2) = $3
 
 	err = rows.Close()
 	if err != nil {
-		return -1, fmt.Errorf("Problem closing rows: %s", err)
+		return -1, fmt.Errorf("problem closing rows: %s", err)
 	}
 
 	return count, nil
@@ -112,7 +112,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
 	page, userID int, state ReadState) ([]gorselib.RSSItem, error) {
 
 	if page < 1 {
-		return nil, errors.New("Invalid page number.")
+		return nil, errors.New("invalid page number")
 	}
 
 	query := `
@@ -185,7 +185,7 @@ COALESCE(ris.user_id, $2) = $3
 
 	err = rows.Err()
 	if err != nil {
-		return nil, fmt.Errorf("Failure fetching rows: %s", err)
+		return nil, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
 	return items, nil
@@ -216,7 +216,7 @@ COALESCE(ris.user_id, $2) = $3
 			&item.PublicationDate, &item.FeedID, &item.FeedName, &item.ReadState)
 		if err != nil {
 			_ = rows.Close()
-			return gorselib.RSSItem{}, fmt.Errorf("Failed to scan row: %s", err)
+			return gorselib.RSSItem{}, fmt.Errorf("failed to scan row: %s", err)
 		}
 
 		_ = rows.Close()
@@ -225,10 +225,10 @@ COALESCE(ris.user_id, $2) = $3
 
 	err = rows.Err()
 	if err != nil {
-		return gorselib.RSSItem{}, fmt.Errorf("Failure fetching rows: %s", err)
+		return gorselib.RSSItem{}, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
-	return gorselib.RSSItem{}, fmt.Errorf("Item not found.")
+	return gorselib.RSSItem{}, fmt.Errorf("item not found")
 }
 
 // dbSetItemReadState sets the given item's state in the database.
@@ -265,7 +265,7 @@ VALUES($1, $2, $3)
 `
 	_, err := db.Exec(query, userID, item.FeedID, item.ID)
 	if err != nil {
-		return fmt.Errorf("Unable to insert: %s", err)
+		return fmt.Errorf("unable to insert: %s", err)
 	}
 
 	log.Printf("Recorded item id %d as read after archive.", item.ID)

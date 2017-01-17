@@ -74,7 +74,12 @@ func retrieveFeed(feed *gorselib.RSSFeed) ([]byte, error) {
 		// then we get a runtime error about nil pointer dereference.
 		return nil, err
 	}
-	defer httpResponse.Body.Close()
+	defer func() {
+		err := httpResponse.Body.Close()
+		if err != nil {
+			log.Printf("HTTP response body close: %s", err)
+		}
+	}()
 
 	// while we will be decoding xml, and the xml package can read directly
 	// from an io.reader, I read it all in here for simplicity so that this
@@ -110,7 +115,7 @@ func feedItemExists(db *sql.DB, feed *gorselib.RSSFeed,
 
 	err = rows.Err()
 	if err != nil {
-		return false, fmt.Errorf("Failure fetching rows: %s", err)
+		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
 	if count > 0 {
@@ -134,7 +139,7 @@ func feedItemExists(db *sql.DB, feed *gorselib.RSSFeed,
 
 	err = rows.Err()
 	if err != nil {
-		return false, fmt.Errorf("Failure fetching rows: %s", err)
+		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
 	if count > 0 {
@@ -156,7 +161,7 @@ func recordFeedItem(config *Config, db *sql.DB, feed *gorselib.RSSFeed,
 	if item.Link == "" {
 		log.Printf("Item with title [%s] has no link. Skipping",
 			item.Title)
-		return false, errors.New("Item has blank link")
+		return false, errors.New("item has blank link")
 	}
 	// we need to ensure we have a publication date, and that it is in utc.
 	// if we do not have it, we default to using the current time.
@@ -210,7 +215,7 @@ func updateFeed(config *Config, db *sql.DB, feed *gorselib.RSSFeed) error {
 	// parse the XML response.
 	channel, err := gorselib.ParseFeedXML(xmlData)
 	if err != nil {
-		return fmt.Errorf("Failed to parse XML of feed: %s", err)
+		return fmt.Errorf("failed to parse XML of feed: %s", err)
 	}
 
 	// record information about each item we parsed.
@@ -361,7 +366,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %s", err)
 	}
-	defer db.Close()
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			log.Printf("Database close: %s", err)
+		}
+	}()
 
 	// set gorselib settings.
 	gorselib.SetQuiet(settings.Quiet != 0)

@@ -265,7 +265,7 @@ func ParseFeedXML(data []byte) (*Channel, error) {
 		return channelRDF, nil
 	}
 
-	return nil, fmt.Errorf("Unable to parse as RSS (%v) or RDF (%v)", errRSS,
+	return nil, fmt.Errorf("unable to parse as RSS (%v) or RDF (%v)", errRSS,
 		errRDF)
 }
 
@@ -274,12 +274,12 @@ func looksLikeXML(data []byte) error {
 	prefix := `<?xml version="1.0" encoding="`
 
 	if len(data) < len(prefix) {
-		return errors.New("Buffer is too short to have XML header.")
+		return errors.New("buffer is too short to have XML header")
 	}
 
 	for i := 0; i < len(prefix); i++ {
 		if data[i] != prefix[i] {
-			return errors.New("Buffer does not have XML header.")
+			return errors.New("buffer does not have XML header")
 		}
 	}
 
@@ -316,7 +316,7 @@ func parseAsRSS(data []byte) (*Channel, error) {
 	}
 
 	if strings.ToLower(rssXML.XMLName.Local) != "rss" {
-		return nil, errors.New("Base tag is not RSS.")
+		return nil, errors.New("base tag is not RSS")
 	}
 
 	// Build a channel struct now. It's common to the base formats we support.
@@ -365,7 +365,7 @@ func parseAsRDF(data []byte) (*Channel, error) {
 	}
 
 	if strings.ToLower(rdfXML.XMLName.Local) != "rdf" {
-		return nil, errors.New("Base tag is not RDF.")
+		return nil, errors.New("base tag is not RDF")
 	}
 
 	// TODO: Does RDF have all of these fields?
@@ -527,7 +527,7 @@ ORDER BY name
 
 	err = rows.Err()
 	if err != nil {
-		return nil, fmt.Errorf("Failure fetching rows: %s", err)
+		return nil, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
 	return feeds, nil

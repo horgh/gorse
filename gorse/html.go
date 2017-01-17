@@ -16,7 +16,7 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 	// ensure the specified content template is valid.
 	matched, err := regexp.MatchString("^[_a-zA-Z]+$", contentTemplate)
 	if err != nil || !matched {
-		return errors.New("Invalid template name")
+		return errors.New("invalid template name")
 	}
 
 	header, err := template.ParseFiles("templates/_header.html")
