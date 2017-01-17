@@ -14,12 +14,11 @@ import (
 
 // Channel contains a feed parsed from any format.
 type Channel struct {
-	Title         string
-	Link          string
-	Description   string
-	PubDate       string
-	LastBuildDate string
-	Items         []Item
+	Title       string
+	Link        string
+	Description string
+	PubDate     string
+	Items       []Item
 }
 
 // Item contains an item/entry in a feed parsed from any format.
@@ -42,13 +41,12 @@ type rssXML struct {
 
 // rssChannelXML is used for parsing/encoding RSS.
 type rssChannelXML struct {
-	XMLName       xml.Name     `xml:"channel"`
-	Title         string       `xml:"title"`
-	Link          string       `xml:"link"`
-	Description   string       `xml:"description"`
-	PubDate       string       `xml:"pubDate"`
-	LastBuildDate string       `xml:"lastBuildDate"`
-	Items         []rssItemXML `xml:"item"`
+	XMLName     xml.Name     `xml:"channel"`
+	Title       string       `xml:"title"`
+	Link        string       `xml:"link"`
+	Description string       `xml:"description"`
+	PubDate     string       `xml:"pubDate"`
+	Items       []rssItemXML `xml:"item"`
 }
 
 // rssItemXML is used for parsing/encoding RSS.
@@ -58,8 +56,6 @@ type rssItemXML struct {
 	Link        string   `xml:"link"`
 	Description string   `xml:"description"`
 	PubDate     string   `xml:"pubDate"`
-	// I use GUID when writing out RSS, but otherwise not.
-	GUID string `xml:"guid"`
 }
 
 // rdfXML is used for parsing RDF.
@@ -215,11 +211,10 @@ func parseAsRSS(data []byte) (*Channel, error) {
 	// Build a channel struct now. It's common to the base formats we support.
 
 	ch := &Channel{
-		Title:         rssXML.Channel.Title,
-		Link:          rssXML.Channel.Link,
-		Description:   rssXML.Channel.Description,
-		PubDate:       rssXML.Channel.PubDate,
-		LastBuildDate: rssXML.Channel.LastBuildDate,
+		Title:       rssXML.Channel.Title,
+		Link:        rssXML.Channel.Link,
+		Description: rssXML.Channel.Description,
+		PubDate:     rssXML.Channel.PubDate,
 	}
 
 	if !config.Quiet {

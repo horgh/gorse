@@ -1,8 +1,10 @@
 package gorselib
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestParseAsRDF(t *testing.T) {
@@ -74,11 +76,10 @@ func TestParseAsRDF(t *testing.T) {
 </rdf:RDF>
 `,
 			&Channel{
-				Title:         "Slashdot",
-				Link:          "https://slashdot.org/",
-				Description:   "News for nerds, stuff that matters",
-				PubDate:       "2017-01-17T21:30:14+00:00",
-				LastBuildDate: "",
+				Title:       "Slashdot",
+				Link:        "https://slashdot.org/",
+				Description: "News for nerds, stuff that matters",
+				PubDate:     "2017-01-17T21:30:14+00:00",
 				Items: []Item{
 					Item{
 						Title:       "Uber Sues City of Seattle To Block Landmark Driver Union Ordinance",
@@ -162,11 +163,10 @@ func TestParseAsAtom(t *testing.T) {
 </feed>
 `,
 			&Channel{
-				Title:         "Test one two",
-				Link:          "http://www.example.com/atom.xml",
-				Description:   "",
-				PubDate:       "2017-01-11T20:30:23-05:00",
-				LastBuildDate: "",
+				Title:       "Test one two",
+				Link:        "http://www.example.com/atom.xml",
+				Description: "",
+				PubDate:     "2017-01-11T20:30:23-05:00",
 				Items: []Item{
 					Item{
 						Title:       "Test title 1",
@@ -229,10 +229,6 @@ func channelEqual(a, b *Channel) error {
 		return fmt.Errorf("channel pubdate mismatch")
 	}
 
-	if a.LastBuildDate != b.LastBuildDate {
-		return fmt.Errorf("channel lastbuilddate mismatch")
-	}
-
 	if len(a.Items) != len(b.Items) {
 		return fmt.Errorf("channel items count mismatch")
 	}
@@ -259,4 +255,85 @@ func channelEqual(a, b *Channel) error {
 	}
 
 	return nil
+}
+
+func TestMakeXML(t *testing.T) {
+	tests := []struct {
+		input   *RSSFeed
+		output  string
+		success bool
+	}{
+		{
+			&RSSFeed{
+				Name:        "Test feed",
+				URI:         "https://www.example.com/",
+				Description: "A nice feed",
+				LastUpdateTime: time.Date(2016, 12, 25, 11, 00, 00, 00,
+					time.FixedZone("TZ", 0)),
+				Items: []RSSItem{
+					RSSItem{
+						Title:       "Nice item 1",
+						URI:         "https://www.example.com/1",
+						Description: "Item 1 is very nice",
+						PublicationDate: time.Date(2016, 12, 25, 11, 01, 00, 00,
+							time.FixedZone("TZ", 0)),
+					},
+					RSSItem{
+						Title:       "Nice item 2",
+						URI:         "https://www.example.com/2",
+						Description: "Item 2 is very nice",
+						PublicationDate: time.Date(2016, 12, 25, 10, 01, 00, 00,
+							time.FixedZone("TZ", 0)),
+					},
+				},
+			},
+			`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test feed</title>
+    <link>https://www.example.com/</link>
+    <description>A nice feed</description>
+    <pubDate>Sun, 25 Dec 2016 11:00:00 +0000</pubDate>
+    <lastBuildDate>Sun, 25 Dec 2016 11:00:00 +0000</lastBuildDate>
+    <item>
+      <title>Nice item 1</title>
+      <link>https://www.example.com/1</link>
+      <description>Item 1 is very nice</description>
+      <pubDate>Sun, 25 Dec 2016 11:01:00 +0000</pubDate>
+      <guid>https://www.example.com/1</guid>
+    </item>
+    <item>
+      <title>Nice item 2</title>
+      <link>https://www.example.com/2</link>
+      <description>Item 2 is very nice</description>
+      <pubDate>Sun, 25 Dec 2016 10:01:00 +0000</pubDate>
+      <guid>https://www.example.com/2</guid>
+    </item>
+  </channel>
+</rss>`,
+			true,
+		},
+	}
+
+	for _, test := range tests {
+		buf, err := makeXML(test.input)
+		if err != nil {
+			if !test.success {
+				continue
+			}
+
+			t.Errorf("makeXML(%#v) = error %s", test.input, err)
+			continue
+		}
+
+		if !test.success {
+			t.Errorf("makeXML(%#v) = success, wanted error", test.input)
+			continue
+		}
+
+		if !bytes.Equal(buf, []byte(test.output)) {
+			t.Errorf("makeXML(%#v) = %s, wanted %s", test.input, buf, test.output)
+			continue
+		}
+	}
 }
