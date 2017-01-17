@@ -69,7 +69,7 @@ type outItemXML struct {
 //
 // A note on timestamps: The RSS spec says we should use RFC 822, but the
 // time.RFC1123Z format looks closest to their examples, so I use that.
-func WriteFeedXML(feed *RSSFeed, filename string) error {
+func WriteFeedXML(feed Feed, filename string) error {
 	xmlDoc, err := makeXML(feed)
 	if err != nil {
 		return fmt.Errorf("unable to generate XML: %s", err)
@@ -89,31 +89,31 @@ func WriteFeedXML(feed *RSSFeed, filename string) error {
 }
 
 // Turn the feed into XML.
-func makeXML(feed *RSSFeed) ([]byte, error) {
+func makeXML(feed Feed) ([]byte, error) {
 	out := outXML{
 		// Version is required. We use 2.0 even though we are generating 2.0.1 as
 		// that, it seems, is the spec.
 		Version: "2.0",
 		Channel: outChannelXML{
-			Title:       feed.Name,
-			Link:        feed.URI,
+			Title:       feed.Title,
+			Link:        feed.Link,
 			Description: feed.Description,
-			// TODO: these dates could/should be different.
-			PubDate:       feed.LastUpdateTime.Format(time.RFC1123Z),
-			LastBuildDate: feed.LastUpdateTime.Format(time.RFC1123Z),
+			// TODO: These dates could/should be different.
+			PubDate:       feed.PubDate.Format(time.RFC1123Z),
+			LastBuildDate: feed.PubDate.Format(time.RFC1123Z),
 		},
 	}
 
 	for _, item := range feed.Items {
 		out.Channel.Items = append(out.Channel.Items, outItemXML{
 			Title:       item.Title,
-			Link:        item.URI,
+			Link:        item.Link,
 			Description: item.Description,
-			PubDate:     item.PublicationDate.Format(time.RFC1123Z),
+			PubDate:     item.PubDate.Format(time.RFC1123Z),
 			// Use the URI as GUID. It should be uniquely identifying the post after
 			// all. Note the GUID has no required format other than it is intended to
 			// be unique.
-			GUID: item.URI,
+			GUID: item.Link,
 		})
 	}
 

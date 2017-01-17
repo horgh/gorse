@@ -264,30 +264,30 @@ func feedEqual(a, b *Feed) error {
 
 func TestMakeXML(t *testing.T) {
 	tests := []struct {
-		input   *RSSFeed
+		input   Feed
 		output  string
 		success bool
 	}{
 		{
-			&RSSFeed{
-				Name:        "Test feed",
-				URI:         "https://www.example.com/",
+			Feed{
+				Title:       "Test feed",
+				Link:        "https://www.example.com/",
 				Description: "A nice feed",
-				LastUpdateTime: time.Date(2016, 12, 25, 11, 0, 0, 0,
+				PubDate: time.Date(2016, 12, 25, 11, 0, 0, 0,
 					time.FixedZone("TZ", 0)),
-				Items: []RSSItem{
-					RSSItem{
+				Items: []Item{
+					Item{
 						Title:       "Nice item 1",
-						URI:         "https://www.example.com/1",
+						Link:        "https://www.example.com/1",
 						Description: "Item 1 is very nice",
-						PublicationDate: time.Date(2016, 12, 25, 11, 01, 0, 0,
+						PubDate: time.Date(2016, 12, 25, 11, 01, 0, 0,
 							time.FixedZone("TZ", 0)),
 					},
-					RSSItem{
+					Item{
 						Title:       "Nice item 2",
-						URI:         "https://www.example.com/2",
+						Link:        "https://www.example.com/2",
 						Description: "Item 2 is very nice",
-						PublicationDate: time.Date(2016, 12, 25, 10, 01, 0, 0,
+						PubDate: time.Date(2016, 12, 25, 10, 01, 0, 0,
 							time.FixedZone("TZ", 0)),
 					},
 				},
