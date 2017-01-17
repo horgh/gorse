@@ -62,8 +62,7 @@ type RSSItem struct {
 	ID          int64
 	Title       string
 	Description string
-	// HTML version of description.
-	// TODO this is only used in gorse...
+	// HTML version of description. TODO: This is only used in gorse.
 	DescriptionHTML       template.HTML
 	URI                   string
 	PublicationDate       time.Time
@@ -144,6 +143,54 @@ type RDFXML struct {
 
 	// For RDF we'll have <item> elements directly as children.
 	RDFItems []RDFItemXML `xml:"item"`
+}
+
+// AtomXML describes an Atom feed. We use it for parsing. See
+// https://tools.ietf.org/html/rfc4287
+type AtomXML struct {
+	// The element name. Enforce it is atom:feed
+	XMLName xml.Name `xml:"http://www.w3.org/2005/Atom feed"`
+
+	// Title is human readable. It must be present.
+	Title string `xml:"title"`
+
+	// Web resource. Zero or more. Feeds should contain with with rel=self.
+	Links []AtomLink `xml:"link"`
+
+	// ID must be present and must be an IRI. Unique but might not be a web
+	// resource.
+	ID string `xml:"id"`
+
+	// Last time feed was updated.
+	Updated string `xml:"updated"`
+
+	Items []AtomItemXML `xml:"entry"`
+}
+
+// AtomLink describes a <link> element.
+type AtomLink struct {
+	Href string `xml:"href,attr"`
+	Rel  string `xml:"rel,attr"`
+}
+
+// AtomItemXML describes an item/entry in the feed. Atom calls these entries,
+// but for consistency with other formats I support, I call them items.
+type AtomItemXML struct {
+	// Human readable title. Must be present.
+	Title string `xml:"title"`
+
+	// Web resource. Zero or more.
+	Links []AtomLink `xml:"link"`
+
+	// ID must be present and must be an IRI. Unique but might not be a web
+	// resource.
+	ID string `xml:"id"`
+
+	// Last time entry updated. Must be present.
+	Updated string `xml:"updated"`
+
+	// Content is optional.
+	Content string `xml:"content"`
 }
 
 // SetQuiet controls the gorselib setting 'Quiet'.
@@ -254,6 +301,8 @@ func GetItemPubDate(pubDate string) time.Time {
 }
 
 // ParseFeedXML takes the raw XML and returns a struct describing the feed.
+//
+// We support various formats. Try our best to decode the feed.
 func ParseFeedXML(data []byte) (*Channel, error) {
 	// It is possible for us to not have valid XML. In such a case, the XML
 	// Decode function will not always complain. One way for this to happen is if
@@ -273,8 +322,12 @@ func ParseFeedXML(data []byte) (*Channel, error) {
 		return channelRDF, nil
 	}
 
-	return nil, fmt.Errorf("unable to parse as RSS (%v) or RDF (%v)", errRSS,
-		errRDF)
+	channelAtom, errAtom := parseAsAtom(data)
+	if errAtom == nil {
+		return channelAtom, nil
+	}
+
+	return nil, fmt.Errorf("unable to parse as RSS, RDF, or Atom")
 }
 
 // looksLikeXML applies some simple checks to know if we have an XML document.
@@ -404,6 +457,62 @@ func parseAsRDF(data []byte) (*Channel, error) {
 	}
 
 	return &channel, nil
+}
+
+// parseAsAtom attempts to parse the buffer as Atom.
+//
+// See parseAsRSS() and parseAsRDF() for similar parsing. Also I omit comments
+// that would be repeated here if they are in those functions.
+func parseAsAtom(data []byte) (*Channel, error) {
+	atomXML := AtomXML{}
+
+	byteReader := bytes.NewBuffer(data)
+	decoder := xml.NewDecoder(byteReader)
+	decoder.CharsetReader = charset.NewReaderLabel
+
+	err := decoder.Decode(&atomXML)
+	if err != nil {
+		return nil, fmt.Errorf("Atom XML decode error: %v", err)
+	}
+
+	// May have multiple <link> elements. Look for rel=self.
+	link := ""
+	for _, l := range atomXML.Links {
+		if l.Rel != "self" {
+			continue
+		}
+		link = l.Href
+		break
+	}
+
+	channel := &Channel{
+		Title:   atomXML.Title,
+		Link:    link,
+		PubDate: atomXML.Updated,
+	}
+
+	if !config.Quiet {
+		log.Printf("Parsed channel as Atom [%s]", channel.Title)
+	}
+
+	for _, item := range atomXML.Items {
+		link := ""
+		// Take the first. Probably we can be more intelligent.
+		if len(item.Links) > 0 {
+			link = item.Links[0].Href
+		}
+
+		channel.Items = append(channel.Items,
+			Item{
+				Title:       item.Title,
+				Link:        link,
+				Description: item.Content,
+				PubDate:     item.Updated,
+				GUID:        item.ID,
+			})
+	}
+
+	return channel, nil
 }
 
 // WriteFeedXML takes an RSSFeed and generates and writes an XML file.
