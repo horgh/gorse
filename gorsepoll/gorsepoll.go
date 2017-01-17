@@ -313,21 +313,15 @@ func recordFeedItem(config *Config, db *sql.DB, feed *gorselib.RSSFeed,
 		return false, nil
 	}
 
-	// We need to ensure we have a publication date, and that it is in utc. If we
-	// do not have it, we default to using the current time.
-	pubDateTime := gorselib.GetItemPubDate(item.PubDate)
-
-	// Convert the pub date time to a string suitable for passing to postgres.
-	var pubDateDb string = pubDateTime.Format(time.RFC3339)
-
 	// We need to record this item.
+
 	query := `
 INSERT INTO rss_item
 (title, description, link, publication_date, rss_feed_id)
 VALUES($1, $2, $3, $4, $5)
 `
 	_, err = db.Exec(query, item.Title, item.Description,
-		item.Link, pubDateDb, feed.ID)
+		item.Link, item.PubDate, feed.ID)
 	if err != nil {
 		log.Printf("Failed to add item with title [%s]: %s", item.Title, err)
 		return false, err

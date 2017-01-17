@@ -79,19 +79,21 @@ func TestParseAsRDF(t *testing.T) {
 				Title:       "Slashdot",
 				Link:        "https://slashdot.org/",
 				Description: "News for nerds, stuff that matters",
-				PubDate:     "2017-01-17T21:30:14+00:00",
+				PubDate:     time.Date(2017, 1, 17, 21, 30, 14, 0, time.FixedZone("TZ", 0)),
 				Items: []Item{
 					Item{
 						Title:       "Uber Sues City of Seattle To Block Landmark Driver Union Ordinance",
 						Link:        "https://tech.slashdot.org/story/17/01/17/197230/uber-sues-city-of-seattle-to-block-landmark-driver-union-ordinance?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 						Description: "Seattle's landmark law that lets drivers",
-						PubDate:     "2017-01-17T20:40:00+00:00",
+						PubDate: time.Date(2017, 1, 17, 20, 40, 0, 0,
+							time.FixedZone("TZ", 0)),
 					},
 					Item{
 						Title:       "Netflix is 'Killing' DVD Sales, Research Finds",
 						Link:        "https://entertainment.slashdot.org/story/17/01/17/1855219/netflix-is-killing-dvd-sales-research-finds?utm_source=rss1.0mainlinkanon&utm_medium=feed",
 						Description: "Netflix has become the go-to destination for many movie",
-						PubDate:     "2017-01-17T20:00:00+00:00",
+						PubDate: time.Date(2017, 1, 17, 20, 0, 0, 0,
+							time.FixedZone("TZ", 0)),
 					},
 				},
 			},
@@ -166,19 +168,22 @@ func TestParseAsAtom(t *testing.T) {
 				Title:       "Test one two",
 				Link:        "http://www.example.com/atom.xml",
 				Description: "",
-				PubDate:     "2017-01-11T20:30:23-05:00",
+				PubDate: time.Date(2017, 1, 11, 20, 30, 23, 0,
+					time.FixedZone("TZ", -5*60*60)),
 				Items: []Item{
 					Item{
 						Title:       "Test title 1",
 						Link:        "http://www.example.com/test-entry-1",
 						Description: "<p>Testing content 1</p>",
-						PubDate:     "2017-01-11T00:00:00-05:00",
+						PubDate: time.Date(2017, 1, 11, 0, 0, 0, 0,
+							time.FixedZone("TZ", -5*60*60)),
 					},
 					Item{
 						Title:       "Test title 2",
 						Link:        "http://www.example.com/test-entry-2",
 						Description: "<p>Testing content 2</p>",
-						PubDate:     "2017-01-12T00:00:00-05:00",
+						PubDate: time.Date(2017, 1, 12, 0, 0, 0, 0,
+							time.FixedZone("TZ", -5*60*60)),
 					},
 				},
 			},
@@ -225,7 +230,7 @@ func feedEqual(a, b *Feed) error {
 		return fmt.Errorf("feed description mismatch")
 	}
 
-	if a.PubDate != b.PubDate {
+	if !a.PubDate.Equal(b.PubDate) {
 		return fmt.Errorf("feed pubdate mismatch")
 	}
 
@@ -249,7 +254,7 @@ func feedEqual(a, b *Feed) error {
 			return fmt.Errorf("item %d description mismatch", i)
 		}
 
-		if ai.PubDate != bi.PubDate {
+		if !ai.PubDate.Equal(bi.PubDate) {
 			return fmt.Errorf("item %d pubdate mismatch", i)
 		}
 	}
@@ -268,21 +273,21 @@ func TestMakeXML(t *testing.T) {
 				Name:        "Test feed",
 				URI:         "https://www.example.com/",
 				Description: "A nice feed",
-				LastUpdateTime: time.Date(2016, 12, 25, 11, 00, 00, 00,
+				LastUpdateTime: time.Date(2016, 12, 25, 11, 0, 0, 0,
 					time.FixedZone("TZ", 0)),
 				Items: []RSSItem{
 					RSSItem{
 						Title:       "Nice item 1",
 						URI:         "https://www.example.com/1",
 						Description: "Item 1 is very nice",
-						PublicationDate: time.Date(2016, 12, 25, 11, 01, 00, 00,
+						PublicationDate: time.Date(2016, 12, 25, 11, 01, 0, 0,
 							time.FixedZone("TZ", 0)),
 					},
 					RSSItem{
 						Title:       "Nice item 2",
 						URI:         "https://www.example.com/2",
 						Description: "Item 2 is very nice",
-						PublicationDate: time.Date(2016, 12, 25, 10, 01, 00, 00,
+						PublicationDate: time.Date(2016, 12, 25, 10, 01, 0, 0,
 							time.FixedZone("TZ", 0)),
 					},
 				},

@@ -17,7 +17,7 @@ type Feed struct {
 	Title       string
 	Link        string
 	Description string
-	PubDate     string
+	PubDate     time.Time
 	Items       []Item
 }
 
@@ -26,7 +26,7 @@ type Item struct {
 	Title       string
 	Link        string
 	Description string
-	PubDate     string
+	PubDate     time.Time
 }
 
 // rssXML is used for parsing/encoding RSS.
@@ -60,7 +60,7 @@ type rssItemXML struct {
 
 // rdfXML is used for parsing RDF.
 type rdfXML struct {
-	// Element name. Don't specify here to check case insensitively.
+	// Element name. Don't specify here so we can check case insensitively.
 	XMLName xml.Name
 
 	Channel rdfChannelXML `xml:"channel"`
@@ -214,7 +214,7 @@ func parseAsRSS(data []byte) (*Feed, error) {
 		Title:       rssXML.Channel.Title,
 		Link:        rssXML.Channel.Link,
 		Description: rssXML.Channel.Description,
-		PubDate:     rssXML.Channel.PubDate,
+		PubDate:     parseTime(rssXML.Channel.PubDate),
 	}
 
 	if !config.Quiet {
@@ -227,7 +227,7 @@ func parseAsRSS(data []byte) (*Feed, error) {
 				Title:       item.Title,
 				Link:        item.Link,
 				Description: item.Description,
-				PubDate:     item.PubDate,
+				PubDate:     parseTime(item.PubDate),
 			})
 	}
 
@@ -262,7 +262,7 @@ func parseAsRDF(data []byte) (*Feed, error) {
 		Title:       rdfXML.Channel.Title,
 		Link:        link,
 		Description: rdfXML.Channel.Description,
-		PubDate:     rdfXML.Channel.PubDate,
+		PubDate:     parseTime(rdfXML.Channel.PubDate),
 	}
 
 	if !config.Quiet {
@@ -275,7 +275,7 @@ func parseAsRDF(data []byte) (*Feed, error) {
 				Title:       item.Title,
 				Link:        item.Link,
 				Description: item.Description,
-				PubDate:     item.PubDate,
+				PubDate:     parseTime(item.PubDate),
 			})
 	}
 
@@ -311,7 +311,7 @@ func parseAsAtom(data []byte) (*Feed, error) {
 	feed := &Feed{
 		Title:   atomXML.Title,
 		Link:    link,
-		PubDate: atomXML.Updated,
+		PubDate: parseTime(atomXML.Updated),
 	}
 
 	if !config.Quiet {
@@ -325,23 +325,22 @@ func parseAsAtom(data []byte) (*Feed, error) {
 			link = item.Links[0].Href
 		}
 
-		feed.Items = append(feed.Items,
-			Item{
-				Title:       item.Title,
-				Link:        link,
-				Description: item.Content,
-				PubDate:     item.Updated,
-			})
+		feed.Items = append(feed.Items, Item{
+			Title:       item.Title,
+			Link:        link,
+			Description: item.Content,
+			PubDate:     parseTime(item.Updated),
+		})
 	}
 
 	return feed, nil
 }
 
-// GetItemPubDate tries to retrieve a publication date for the item.
+// parseTime tries to retrieve a publication date for the item.
 //
 // We try parsing using multiple formats, and fall back to a default of the
 // current time if none succeed.
-func GetItemPubDate(pubDate string) time.Time {
+func parseTime(pubDate string) time.Time {
 	if len(pubDate) == 0 {
 		if !config.Quiet {
 			log.Print("No pub date given - using default.")
