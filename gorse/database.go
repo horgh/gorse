@@ -27,7 +27,8 @@ func connectToDB(settings *GorseConfig) (*sql.DB, error) {
 
 // getDB connects us to the database if necessary, and returns an active
 // database connection.
-// we use the global DB variable to try to ensure we use a single connection.
+//
+// We use the global DB variable to try to ensure we use a single connection.
 func getDB(settings *GorseConfig) (*sql.DB, error) {
 	// If we have a db connection, ensure that it is still available so that we
 	// reconnect if it is not.
@@ -40,6 +41,7 @@ func getDB(settings *GorseConfig) (*sql.DB, error) {
 		log.Printf("Database ping failed: %s", err)
 
 		// Continue on, but set us so that we attempt to reconnect.
+
 		DBLock.Lock()
 		if DB != nil {
 			_ = DB.Close()
@@ -142,7 +144,7 @@ COALESCE(ris.user_id, $2) = $3
 		return nil, err
 	}
 
-	// our display timezone location.
+	// Our display timezone location.
 	location, err := time.LoadLocation(settings.DisplayTimeZone)
 	if err != nil {
 		log.Printf("Failed to load time zone location [%s]",
@@ -162,10 +164,10 @@ COALESCE(ris.user_id, $2) = $3
 			return nil, err
 		}
 
-		// set time to the display timezone.
+		// Set time to the display timezone.
 		item.PublicationDate = item.PublicationDate.In(location)
 
-		// sanitise the text.
+		// Sanitise the text.
 		item.Title, err = gorselib.SanitiseItemText(item.Title)
 		if err != nil {
 			log.Printf("Failed to sanitise title: %s", err)

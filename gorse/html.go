@@ -8,12 +8,13 @@ import (
 	"regexp"
 )
 
-// renderPage builds a full page. the specified content template is
-// used to build the content section of the page wrapped between
-// header and footer.
+// renderPage builds a full page.
+//
+// The specified content template is used to build the content section of the
+// page wrapped between header and footer.
 func renderPage(rw http.ResponseWriter, contentTemplate string,
 	data interface{}) error {
-	// ensure the specified content template is valid.
+	// Ensure the specified content template is valid.
 	matched, err := regexp.MatchString("^[_a-zA-Z]+$", contentTemplate)
 	if err != nil || !matched {
 		return errors.New("invalid template name")
@@ -25,45 +26,52 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 		return err
 	}
 
-	// content.
+	// Content.
+
 	funcMap := template.FuncMap{
 		"getRowCSSClass": getRowCSSClass,
 	}
-	// we need the base path as that is the name that gets assigned
-	// to the template internally due to how we create the template.
-	// that is, through New(), then ParseFiles() - ParseFiles() sets
-	// the name of the template using the basename of the file.
+
+	// We need the base path as that is the name that gets assigned to the
+	// template internally due to how we create the template. That is, through
+	// New(), then ParseFiles() - ParseFiles() sets the name of the template
+	// using the basename of the file.
 	contentTemplateBasePath := contentTemplate + ".html"
 	contentTemplatePath := "templates/" + contentTemplateBasePath
-	content, err := template.New("content").Funcs(funcMap).ParseFiles(contentTemplatePath)
+	content, err := template.New("content").Funcs(funcMap).ParseFiles(
+		contentTemplatePath)
 	if err != nil {
 		log.Printf("Failed to load content template [%s]: %s", contentTemplate, err)
 		return err
 	}
 
-	// footer.
+	// Footer.
 	footer, err := template.ParseFiles("templates/_footer.html")
 	if err != nil {
 		log.Printf("Failed to load footer: %s", err)
 		return err
 	}
 
-	// execute the templates and write them out.
+	// Execute the templates and write them out.
+
 	err = header.Execute(rw, data)
 	if err != nil {
 		log.Printf("Failed to execute header: %s", err)
 		return err
 	}
+
 	err = content.ExecuteTemplate(rw, contentTemplateBasePath, data)
 	if err != nil {
 		log.Printf("Failed to execute content: %s", err)
 		return err
 	}
+
 	err = footer.Execute(rw, data)
 	if err != nil {
 		log.Printf("Failed to execute footer: %s", err)
 		return err
 	}
+
 	return nil
 }
 
@@ -76,17 +84,22 @@ func getRowCSSClass(index int) string {
 }
 
 // getHTMLDescription builds the HTML encoded description.
-// we call it while generating HTML.
-// text is the unencoded string, and we return HTML encoded.
-// we have this so we can make inline urls into links.
+//
+// We call this while generating HTML.
+//
+// Text is the unencoded string, and we return HTML encoded.
+//
+// We have this so we can make inline URLs into links.
 func getHTMLDescription(text string) template.HTML {
-	// encode the entire string as HTML first.
+	// Encode the entire string as HTML first.
 	html := template.HTMLEscapeString(text)
 
-	// wrap up URLs in <a>.
+	// Wrap up URLs in <a>.
+	//
 	// I previously used this re: \b(https?://\S+)
-	// but there were issues with it recognising non-url characters. I even
-	// found it match a space which seems like it should be impossible.
+	//
+	// But there were issues with it recognising non-URL characters. I even found
+	// it match a space which seems like it should be impossible.
 	re := regexp.MustCompile(`\b(https?://[A-Za-z0-9\-\._~:/\?#\[\]@!\$&'\(\)\*\+,;=]+)`)
 	return template.HTML(re.ReplaceAllString(html, `<a href="$1">$1</a>`))
 }

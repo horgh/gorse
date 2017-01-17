@@ -1,6 +1,7 @@
 //
-// gorse is a web front end to a database of RSS feeds/items. The database gets
-// populated by my RSS poller, gorsepoll.
+// gorse is a web front end to a database of RSS feeds and their items/entries.
+//
+// The database gets populated by my RSS poller, gorsepoll.
 //
 // The interface shows items from feeds and allows flagging them as read.
 //
@@ -50,9 +51,11 @@ type GorseConfig struct {
 }
 
 // DB is the connection to the database.
+//
 // This is so we try to share a single connection for multiple requests.
-// NOTE: According to the database/sql documentation, the DB type
-//   is indeed safe for concurrent use by multiple goroutines.
+//
+// Note according to the database/sql documentation, the DB type is indeed safe
+// for concurrent use by multiple goroutines.
 var DB *sql.DB
 
 // DBLock helps us avoid race conditions associated with the database. Such as
@@ -60,8 +63,9 @@ var DB *sql.DB
 var DBLock sync.Mutex
 
 // HTTPHandler holds functions/data used to service HTTP requests.
-// We need this struct as we must pass instances of it to fcgi.Serve.
-// This is because it must conform to the http.Handler interface.
+//
+// We need this struct as we must pass instances of it to fcgi.Serve. This is
+// because it must conform to the http.Handler interface.
 type HTTPHandler struct {
 	settings     *GorseConfig
 	sessionStore *sessions.CookieStore
@@ -93,7 +97,8 @@ func main() {
 
 	configPath := flag.String("config", "", "Path to a configuration file.")
 	logPath := flag.String("log-file", "", "Path to a log file.")
-	wwwPath := flag.String("www-path", "", "Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
+	wwwPath := flag.String("www-path", "",
+		"Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
 	flag.Parse()
 
 	if len(*configPath) == 0 {
@@ -115,23 +120,20 @@ func main() {
 	// Open log file. Don't use os.Create() because that truncates.
 	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		log.Printf("Failed to open log file: %s: %s", *logPath, err)
-		os.Exit(1)
+		log.Fatalf("Failed to open log file: %s: %s", *logPath, err)
 	}
 	log.SetOutput(logFh)
 
 	// chdir to the www path so we can get what we need to serve up.
 	err = os.Chdir(*wwwPath)
 	if err != nil {
-		log.Printf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
-		os.Exit(1)
+		log.Fatalf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
 	}
 
 	var settings GorseConfig
 	err = config.GetConfig(*configPath, &settings)
 	if err != nil {
-		log.Printf("Failed to retrieve config: %s", err)
-		os.Exit(1)
+		log.Fatalf("Failed to retrieve config: %s", err)
 	}
 
 	var sessionStore = sessions.NewCookieStore(
@@ -141,8 +143,7 @@ func main() {
 		settings.ListenPort)
 	listener, err := net.Listen("tcp", listenHostPort)
 	if err != nil {
-		log.Printf("Failed to open port: %s", err)
-		os.Exit(1)
+		log.Fatalf("Failed to open port: %s", err)
 	}
 
 	var httpHandler = HTTPHandler{
@@ -150,25 +151,25 @@ func main() {
 		sessionStore: sessionStore,
 	}
 
-	// This will serve requests forever - should we have a signal or a method to
-	// cause this to gracefully stop?
+	// TODO: This will serve requests forever. Should we have a signal or a method
+	// to cause this to gracefully stop?
 	log.Print("Starting to serve requests. (FastCGI)")
 	err = fcgi.Serve(listener, httpHandler)
 	if err != nil {
-		log.Printf("Failed to start serving: %s", err)
-		os.Exit(1)
+		log.Fatalf("Failed to start serving: %s", err)
 	}
 }
 
-// ServeHTTP handles an http request. it is invoked by the fastcgi
-// package in a goroutine.
+// ServeHTTP handles an HTTP request. It is invoked by the fastcgi package in a
+// goroutine.
 func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	request *http.Request) {
 	log.Printf("Serving [%s] request from [%s] to path [%s]", request.Method,
 		request.RemoteAddr, request.URL.Path)
 
 	// Get existing session, or make a new one.
-	session, err := handler.sessionStore.Get(request, handler.settings.SessionName)
+	session, err := handler.sessionStore.Get(request,
+		handler.settings.SessionName)
 	if err != nil {
 		log.Printf("Session Get error: %s", err)
 		send500Error(rw, "Failed to get your session.")
@@ -229,8 +230,9 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 
 		if matched {
 			actionHandler.Func(rw, request, handler.settings, session)
-			// NOTE: We don't session.Save() here as if we redirect the Save()
-			//   won't take effect.
+			// Note we don't session.Save() here as if we redirect the Save() won't
+			// take effect.
+			//
 			// Clean up gorilla globals. Sessions package says this must be done or
 			// we'll leak memory.
 			context.Clear(request)
@@ -239,6 +241,7 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	}
 
 	// There was no matching handler. Send a 404.
+
 	log.Printf("No handler for this request.")
 	rw.WriteHeader(http.StatusNotFound)
 	_, _ = rw.Write([]byte("<h1>404 Not Found</h1>"))
@@ -270,9 +273,10 @@ func (s ReadState) String() string {
 	return "read-later"
 }
 
-// handlerListItems handles a list rss items request and builds an html
+// handlerListItems handles a list RSS items request and builds an HTML
 // response.
-// it implements the type RequestHandlerFunc
+//
+// It implements the type RequestHandlerFunc
 func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
 
@@ -283,9 +287,8 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// Retrieve the feeds from the database. we want to be able to
-	// list our feeds and show information such as when the last time
-	// we updated was.
+	// Retrieve the feeds from the database. We want to be able to list our feeds
+	// and show information such as when the last time we updated was.
 	feeds, err := gorselib.RetrieveFeeds(db)
 	if err != nil {
 		log.Printf("Failed to retrieve feeds: %s", err)
@@ -323,8 +326,8 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	if userIDStr == "" {
 		log.Printf("No user ID found")
 		// TODO: At this time I have users partially implemented. There is only one
-		//   user really. Default to that user. When we require logins and such this
-		//   will need to change.
+		//   user. Default to that user. When we require logins and such this will
+		//   need to change.
 		userIDStr = "1"
 	}
 	userID, err := strconv.Atoi(userIDStr)
@@ -343,28 +346,29 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 
 	// Retrieve items from the database.
-	items, err := dbRetrieveFeedItems(db, settings, order, page, userID, readState)
+	items, err := dbRetrieveFeedItems(db, settings, order, page, userID,
+		readState)
 	if err != nil {
 		log.Printf("Failed to retrieve items: %s", err)
 		send500Error(rw, "Failed to retrieve items")
 		return
 	}
 
-	// Set up additional information about each item.
-	// Specifically we want to set a string timestamp.
+	// Set up additional information about each item. Specifically we want to set
+	// a string timestamp.
 	for i, item := range items {
-		// format time.
+		// Format the time.
 		items[i].PublicationDateString = item.PublicationDate.Format(time.RFC1123Z)
 
-		// ensure we say no title if there is no title.
-		// (so there is something to have in the link content)
+		// Ensure we say no title if there is no title. This is important for one
+		// thing so that there is something in the link content.
 		if len(items[i].Title) == 0 {
 			items[i].Title = "<No title>"
 		}
 
-		// make HTML version of description. we set it as type HTML so the template
-		// execution knows not to re-encode it. we want to control the encoding
-		// more carefully for making links of URLs, for one.
+		// Make an HTML version of description. We set it as type HTML so the
+		// template execution knows not to re-encode it. We want to control the
+		// encoding more carefully for making links of URLs, for one.
 		items[i].DescriptionHTML = getHTMLDescription(items[i].Description)
 	}
 
@@ -383,12 +387,11 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 	prevPage := page - 1
 
-	// We may have messages to display.
-	// Right now we only have success messages
+	// We may have messages to display. Right now we only have success messages
 	flashes := session.Flashes()
 	var successMessages []string
 	for _, flash := range flashes {
-		// type assertion. flash is interface{}
+		// Type assertion. flash is interface{}
 		if str, ok := flash.(string); ok {
 			successMessages = append(successMessages, str)
 		}
@@ -483,9 +486,9 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// What read state were we viewing? This tells us where to go after.
-	// We either view unread or read later items. Those marked read we never can
-	// see again currently.
+	// What read state were we viewing? This tells us where to go after. We
+	// either view unread or read later items. Those marked read we never can see
+	// again currently.
 	readState := Unread
 	requestedReadState := request.PostForm.Get("read-state")
 	if requestedReadState == "read-later" {
@@ -596,23 +599,25 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 }
 
 // handlerStaticFiles serves up some static files.
-// it implements the type RequestHandlerFunc
-// while it may be 'better' to serve these through a 'real' httpd, this
-// simplifies setup, so support this method too.
+//
+// It implements the type RequestHandlerFunc
+//
+// While it may be better to serve these through a standalone httpd or
+// something, this simplifies setup, so support this method too.
 func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
 	log.Printf("Serving static request [%s]", request.URL.Path)
 
-	// set the dir we serve.
-	// TODO: possibly we should get this from a config and use an absolute
+	// Set the dir we serve.
+	// TODO: Possibly we should get this from a config and use an absolute
 	//   path?
 	var staticDir = http.Dir("./static")
 
-	// create the fileserver handler that deals with the internals for us.
+	// Create the fileserver handler that deals with the internals for us.
 	var fileserverHandler = http.FileServer(staticDir)
 
-	// we want to serve up the directory without the global uri prefix
-	// since it is relative / may bare no resemblance to the request path.
+	// We want to serve up the directory without the global URI prefix. Since it
+	// is relative / may bare no resemblance to the request path.
 	var strippedHandler = http.StripPrefix(settings.URIPrefix+"/static/",
 		fileserverHandler)
 	strippedHandler.ServeHTTP(rw, request)
