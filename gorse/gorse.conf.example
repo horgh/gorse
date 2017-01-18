@@ -1,7 +1,9 @@
-# http listen host.
+# Listen for FastCGI/HTTP on this host and port.
 ListenHost = 127.0.0.1
-# http listen port.
 ListenPort = 9901
+
+# Serve using FastCGI (1) or HTTP (0)
+FastCGI = 1
 
 DBUser =
 DBPass =

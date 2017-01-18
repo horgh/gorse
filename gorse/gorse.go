@@ -36,10 +36,14 @@ import (
 type GorseConfig struct {
 	ListenHost string
 	ListenPort uint64
-	DBUser     string
-	DBPass     string
-	DBName     string
-	DBHost     string
+
+	// Whether to serve using FastCGI (1) or regular HTTP (0)
+	FastCGI int32
+
+	DBUser string
+	DBPass string
+	DBName string
+	DBHost string
 
 	// TODO: Auto detect timezone, or move this to a user setting
 	DisplayTimeZone string
@@ -138,24 +142,40 @@ func main() {
 	var sessionStore = sessions.NewCookieStore(
 		[]byte(settings.CookieAuthenticationKey))
 
-	var listenHostPort = fmt.Sprintf("%s:%d", settings.ListenHost,
-		settings.ListenPort)
-	listener, err := net.Listen("tcp", listenHostPort)
-	if err != nil {
-		log.Fatalf("Failed to open port: %s", err)
-	}
+	hostPort := fmt.Sprintf("%s:%d", settings.ListenHost, settings.ListenPort)
 
-	var httpHandler = HTTPHandler{
+	handler := HTTPHandler{
 		settings:     &settings,
 		sessionStore: sessionStore,
 	}
 
-	// TODO: This will serve requests forever. Should we have a signal or a method
+	// TODO: We serve requests forever. Should we have a signal or a method
 	// to cause this to gracefully stop?
-	log.Print("Starting to serve requests. (FastCGI)")
-	err = fcgi.Serve(listener, httpHandler)
-	if err != nil {
-		log.Fatalf("Failed to start serving: %s", err)
+
+	if settings.FastCGI == 1 {
+		log.Printf("Starting to serve requests on %s (FastCGI)", hostPort)
+
+		listener, err := net.Listen("tcp", hostPort)
+		if err != nil {
+			log.Fatalf("Failed to open port: %s", err)
+		}
+
+		err = fcgi.Serve(listener, handler)
+		if err != nil {
+			log.Fatalf("Failed to start serving: %s", err)
+		}
+	} else {
+		log.Printf("Starting to serve requests on %s (HTTP)", hostPort)
+
+		s := &http.Server{
+			Addr:    hostPort,
+			Handler: handler,
+		}
+
+		err := s.ListenAndServe()
+		if err != nil {
+			log.Fatalf("Unable to serve: %s", err)
+		}
 	}
 }
 
@@ -360,6 +380,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		ID              int64
 		FeedName        string
 		Title           string
+		Link            string
 		PublicationDate string
 		Description     template.HTML
 	}
@@ -392,6 +413,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			ID:              item.ID,
 			FeedName:        item.FeedName,
 			Title:           title,
+			Link:            item.Link,
 			PublicationDate: item.PublicationDate.In(location).Format(time.RFC1123Z),
 			// Make an HTML version of description. We set it as type HTML so the
 			// template execution knows not to re-encode it. We want to control the
