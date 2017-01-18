@@ -6,9 +6,27 @@ import (
 	"fmt"
 	"log"
 	"time"
-
-	"github.com/horgh/gorse/gorselib"
 )
+
+// DBItem holds the information about an input/entry that is in the database.
+type DBItem struct {
+	// Database ID.
+	ID          int64
+	Title       string
+	Description string
+	Link        string
+	// Feed database ID.
+	FeedID          int64
+	PublicationDate time.Time
+
+	// Info from the feed table.
+	// TODO: Does this belong here?
+	FeedName string
+
+	// Read state from rss_item_state table
+	// TODO: Does this belong here?
+	ReadState string
+}
 
 // connectToDB opens a new connection to the database.
 func connectToDB(settings *GorseConfig) (*sql.DB, error) {
@@ -111,7 +129,7 @@ COALESCE(ris.user_id, $2) = $3
 // dbRetrieveFeedItems retrieves feed items from the database which are marked
 // a given state.
 func dbRetrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
-	page, userID int, state ReadState) ([]gorselib.RSSItem, error) {
+	page, userID int, state ReadState) ([]DBItem, error) {
 
 	if page < 1 {
 		return nil, errors.New("invalid page number")
@@ -147,16 +165,15 @@ COALESCE(ris.user_id, $2) = $3
 	// Our display timezone location.
 	location, err := time.LoadLocation(settings.DisplayTimeZone)
 	if err != nil {
-		log.Printf("Failed to load time zone location [%s]",
-			settings.DisplayTimeZone)
+		log.Printf("Failed to load time zone location [%s]", settings.DisplayTimeZone)
 		return nil, err
 	}
 
-	var items []gorselib.RSSItem
+	var items []DBItem
 	for rows.Next() {
-		var item gorselib.RSSItem
+		item := DBItem{}
 
-		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.URI,
+		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.Link,
 			&item.Description, &item.PublicationDate)
 		if err != nil {
 			log.Printf("Failed to scan row information: %s", err)
@@ -165,22 +182,8 @@ COALESCE(ris.user_id, $2) = $3
 		}
 
 		// Set time to the display timezone.
+		// TODO: Does this belong here?
 		item.PublicationDate = item.PublicationDate.In(location)
-
-		// Sanitise the text.
-		item.Title, err = gorselib.SanitiseItemText(item.Title)
-		if err != nil {
-			log.Printf("Failed to sanitise title: %s", err)
-			_ = rows.Close()
-			return nil, err
-		}
-
-		item.Description, err = gorselib.SanitiseItemText(item.Description)
-		if err != nil {
-			log.Printf("Failed to sanitise description: %s", err)
-			_ = rows.Close()
-			return nil, err
-		}
 
 		items = append(items, item)
 	}
@@ -195,7 +198,7 @@ COALESCE(ris.user_id, $2) = $3
 
 // Retrieve an item's information from the database. This includes the item's
 // state for the given user.
-func dbGetItem(db *sql.DB, itemID int64, userID int) (gorselib.RSSItem, error) {
+func dbGetItem(db *sql.DB, itemID int64, userID int) (DBItem, error) {
 	query := `
 SELECT
 ri.id, ri.title, ri.description, ri.link, ri.publication_date,
@@ -208,17 +211,17 @@ COALESCE(ris.user_id, $2) = $3
 `
 	rows, err := db.Query(query, itemID, userID, userID)
 	if err != nil {
-		return gorselib.RSSItem{}, err
+		return DBItem{}, err
 	}
 
 	for rows.Next() {
-		item := gorselib.RSSItem{}
+		item := DBItem{}
 
-		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.URI,
+		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
 			&item.PublicationDate, &item.FeedID, &item.FeedName, &item.ReadState)
 		if err != nil {
 			_ = rows.Close()
-			return gorselib.RSSItem{}, fmt.Errorf("failed to scan row: %s", err)
+			return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
 		}
 
 		_ = rows.Close()
@@ -227,10 +230,10 @@ COALESCE(ris.user_id, $2) = $3
 
 	err = rows.Err()
 	if err != nil {
-		return gorselib.RSSItem{}, fmt.Errorf("failure fetching rows: %s", err)
+		return DBItem{}, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
-	return gorselib.RSSItem{}, fmt.Errorf("item not found")
+	return DBItem{}, fmt.Errorf("item not found")
 }
 
 // dbSetItemReadState sets the given item's state in the database.
@@ -258,8 +261,7 @@ SET state = $4
 //
 // It is useful to be able to refer back to such items as it is likely they were
 // looked at more closely than others.
-func dbRecordReadAfterArchive(db *sql.DB, userID int,
-	item gorselib.RSSItem) error {
+func dbRecordReadAfterArchive(db *sql.DB, userID int, item DBItem) error {
 	query := `
 INSERT INTO rss_item_read_after_archive
 (user_id, rss_feed_id, rss_item_id)

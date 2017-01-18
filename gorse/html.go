@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"html"
 	"html/template"
 	"log"
 	"net/http"
@@ -102,4 +103,55 @@ func getHTMLDescription(text string) template.HTML {
 	// it match a space which seems like it should be impossible.
 	re := regexp.MustCompile(`\b(https?://[A-Za-z0-9\-\._~:/\?#\[\]@!\$&'\(\)\*\+,;=]+)`)
 	return template.HTML(re.ReplaceAllString(html, `<a href="$1">$1</a>`))
+}
+
+// sanitiseItemText takes text (e.g., title or description) and removes any HTML
+// markup. This is because some feeds (e.g., Slashdot) include a lot of markup
+// I don't want to actually show.
+//
+// We also decode HTML entities since apparently we can get these through to
+// this point (they will be encoded again as necessary when we render the
+// page).
+//
+// For example in a raw XML from Slashdot we have this:
+//
+// <item><title>AT&amp;amp;T Gets Patent To Monitor and Track File-Sharing Traffic</title>
+//
+// Which gets placed into the database as:
+// AT&amp;T Gets Patent To Monitor and Track File-Sharing Traffic
+//
+// This can be used to take any string which has HTML in it to clean up that
+// string and make it non-HTML.
+//
+// While elements such as 'title' can have HTMLin them, this seems applied
+// inconsistently. For instance, consider this title from a Slashdot feed:
+//
+// <title>Google Maps Updated With Skyfall&lt;/em&gt; Island Japan Terrain</title>
+//
+// That is: </em> in there but no <em>.
+//
+// In the database this is present as </em>.
+//
+// Thus we do not place the HTML into the page raw.
+func sanitiseItemText(text string) (string, error) {
+	// First remove raw HTML.
+	re, err := regexp.Compile("(?s)<.*?>")
+	if err != nil {
+		log.Printf("Failed to compile html regexp: %s", err)
+		return text, err
+	}
+	text = re.ReplaceAllString(text, "")
+
+	// Decode HTML entities.
+	text = html.UnescapeString(text)
+
+	// Turn any multiple spaces into a single space.
+	re, err = regexp.Compile("(?s)\\s+")
+	if err != nil {
+		log.Printf("Failed to compile whitespace regexp: %s", err)
+		return text, err
+	}
+	text = re.ReplaceAllString(text, " ")
+
+	return text, nil
 }

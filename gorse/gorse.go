@@ -29,7 +29,6 @@ import (
 	"github.com/gorilla/context"
 	"github.com/gorilla/sessions"
 	"github.com/horgh/config"
-	"github.com/horgh/gorse/gorselib"
 	_ "github.com/lib/pq"
 )
 
@@ -287,15 +286,6 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// Retrieve the feeds from the database. We want to be able to list our feeds
-	// and show information such as when the last time we updated was.
-	feeds, err := gorselib.RetrieveFeeds(db)
-	if err != nil {
-		log.Printf("Failed to retrieve feeds: %s", err)
-		send500Error(rw, "Failed to retrieve feeds")
-		return
-	}
-
 	// We can be told different sort display order. This is in the URL.
 	requestValues := request.URL.Query()
 
@@ -355,21 +345,50 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 
 	// Set up additional information about each item. Specifically we want to set
-	// a string timestamp.
-	for i, item := range items {
-		// Format the time.
-		items[i].PublicationDateString = item.PublicationDate.Format(time.RFC1123Z)
+	// a string timestamp and do some formatting.
 
-		// Ensure we say no title if there is no title. This is important for one
-		// thing so that there is something in the link content.
-		if len(items[i].Title) == 0 {
-			items[i].Title = "<No title>"
+	type HTMLItem struct {
+		ID              int64
+		FeedName        string
+		Title           string
+		PublicationDate string
+		Description     template.HTML
+	}
+
+	htmlItems := []HTMLItem{}
+
+	for _, item := range items {
+		title, err := sanitiseItemText(item.Title)
+		if err != nil {
+			log.Printf("Failed to sanitise title: %s", err)
+			send500Error(rw, "Failed to format title")
+			return
 		}
 
-		// Make an HTML version of description. We set it as type HTML so the
-		// template execution knows not to re-encode it. We want to control the
-		// encoding more carefully for making links of URLs, for one.
-		items[i].DescriptionHTML = getHTMLDescription(items[i].Description)
+		// Ensure we say no title if there is no title. This is important for one
+		// thing so that there is something in the link content. TODO: We could do
+		// this in the template.
+		if len(title) == 0 {
+			title = "No title"
+		}
+
+		description, err := sanitiseItemText(item.Description)
+		if err != nil {
+			log.Printf("Failed to sanitise description: %s", err)
+			send500Error(rw, "Failed to format description")
+			return
+		}
+
+		htmlItems = append(htmlItems, HTMLItem{
+			ID:              item.ID,
+			FeedName:        item.FeedName,
+			Title:           title,
+			PublicationDate: item.PublicationDate.Format(time.RFC1123Z),
+			// Make an HTML version of description. We set it as type HTML so the
+			// template execution knows not to re-encode it. We want to control the
+			// encoding more carefully for making links of URLs, for one.
+			Description: getHTMLDescription(description),
+		})
 	}
 
 	// Get count of total feed items (all pages).
@@ -407,8 +426,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// Show the page.
 
 	type ListItemsPage struct {
-		Items            []gorselib.RSSItem
-		Feeds            []gorselib.RSSFeed
+		Items            []HTMLItem
 		SuccessMessages  []string
 		Path             string
 		SortOrder        string
@@ -424,8 +442,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	}
 
 	listItemsPage := ListItemsPage{
-		Items:            items,
-		Feeds:            feeds,
+		Items:            htmlItems,
 		SuccessMessages:  successMessages,
 		Path:             request.URL.Path,
 		SortOrder:        sortRaw,
