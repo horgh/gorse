@@ -34,8 +34,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// GorseConfig holds runtime configuration information.
-type GorseConfig struct {
+// Config holds runtime configuration information.
+type Config struct {
 	ListenHost string
 	ListenPort uint64
 
@@ -75,7 +75,7 @@ var DBLock sync.Mutex
 // We need this struct as we must pass instances of it to fcgi.Serve. This is
 // because it must conform to the http.Handler interface.
 type HTTPHandler struct {
-	settings     *GorseConfig
+	settings     *Config
 	sessionStore *sessions.CookieStore
 }
 
@@ -113,7 +113,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	settings := GorseConfig{}
+	settings := Config{}
 	err := config.GetConfig(*configPath, &settings)
 	if err != nil {
 		log.Fatalf("Failed to retrieve config: %s", err)
@@ -228,7 +228,7 @@ func (h HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	// HTTP method and the path.
 
 	type RequestHandlerFunc func(http.ResponseWriter, *http.Request,
-		*GorseConfig, *sessions.Session)
+		*Config, *sessions.Session)
 
 	type RequestHandler struct {
 		Method string
@@ -325,7 +325,7 @@ func (s ReadState) String() string {
 //
 // It implements the type RequestHandlerFunc
 func handlerListItems(rw http.ResponseWriter, request *http.Request,
-	settings *GorseConfig, session *sessions.Session) {
+	settings *Config, session *sessions.Session) {
 
 	db, err := getDB(settings)
 	if err != nil {
@@ -532,7 +532,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 // We update the requested flags in the database, and then redirect us back to
 // the list of items page.
 func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
-	settings *GorseConfig, session *sessions.Session) {
+	settings *Config, session *sessions.Session) {
 	// We should have some posted request values. In order to get at these, we
 	// have to run ParseForm().
 	err := request.ParseForm()
@@ -681,7 +681,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 // While it may be better to serve these through a standalone httpd or
 // something, this simplifies setup, so support this method too.
 func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
-	settings *GorseConfig, session *sessions.Session) {
+	settings *Config, session *sessions.Session) {
 	log.Printf("Serving static request [%s]", request.URL.Path)
 
 	// Serve files from /WebRoot. At this point, GET /gorse.js goes to

@@ -27,7 +27,7 @@ type DBItem struct {
 }
 
 // connectToDB opens a new connection to the database.
-func connectToDB(settings *GorseConfig) (*sql.DB, error) {
+func connectToDB(settings *Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s connect_timeout=10",
 		settings.DBUser, settings.DBPass, settings.DBName, settings.DBHost)
 
@@ -45,7 +45,7 @@ func connectToDB(settings *GorseConfig) (*sql.DB, error) {
 // database connection.
 //
 // We use the global DB variable to try to ensure we use a single connection.
-func getDB(settings *GorseConfig) (*sql.DB, error) {
+func getDB(settings *Config) (*sql.DB, error) {
 	// If we have a db connection, ensure that it is still available so that we
 	// reconnect if it is not.
 	if DB != nil {
@@ -126,7 +126,7 @@ COALESCE(ris.user_id, $2) = $3
 
 // dbRetrieveFeedItems retrieves feed items from the database which are marked
 // a given state.
-func dbRetrieveFeedItems(db *sql.DB, settings *GorseConfig, order sortOrder,
+func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 	page, userID int, state ReadState) ([]DBItem, error) {
 
 	if page < 1 {

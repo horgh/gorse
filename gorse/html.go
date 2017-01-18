@@ -14,7 +14,7 @@ import (
 //
 // The specified content template is used to build the content section of the
 // page wrapped between header and footer.
-func renderPage(settings *GorseConfig, rw http.ResponseWriter,
+func renderPage(settings *Config, rw http.ResponseWriter,
 	contentTemplate string, data interface{}) error {
 	// Ensure the specified content template is valid.
 	matched, err := regexp.MatchString("^[_a-zA-Z]+$", contentTemplate)
