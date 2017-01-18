@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"path/filepath"
 	"regexp"
 )
 
@@ -13,15 +14,16 @@ import (
 //
 // The specified content template is used to build the content section of the
 // page wrapped between header and footer.
-func renderPage(rw http.ResponseWriter, contentTemplate string,
-	data interface{}) error {
+func renderPage(settings *GorseConfig, rw http.ResponseWriter,
+	contentTemplate string, data interface{}) error {
 	// Ensure the specified content template is valid.
 	matched, err := regexp.MatchString("^[_a-zA-Z]+$", contentTemplate)
 	if err != nil || !matched {
 		return errors.New("invalid template name")
 	}
 
-	header, err := template.ParseFiles("templates/_header.html")
+	header, err := template.ParseFiles(
+		filepath.Join(settings.TemplateDir, "_header.html"))
 	if err != nil {
 		log.Printf("Failed to load header: %s", err)
 		return err
@@ -38,7 +40,8 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 	// New(), then ParseFiles() - ParseFiles() sets the name of the template
 	// using the basename of the file.
 	contentTemplateBasePath := contentTemplate + ".html"
-	contentTemplatePath := "templates/" + contentTemplateBasePath
+	contentTemplatePath := filepath.Join(settings.TemplateDir,
+		contentTemplateBasePath)
 	content, err := template.New("content").Funcs(funcMap).ParseFiles(
 		contentTemplatePath)
 	if err != nil {
@@ -47,7 +50,8 @@ func renderPage(rw http.ResponseWriter, contentTemplate string,
 	}
 
 	// Footer.
-	footer, err := template.ParseFiles("templates/_footer.html")
+	footer, err := template.ParseFiles(
+		filepath.Join(settings.TemplateDir, "_footer.html"))
 	if err != nil {
 		log.Printf("Failed to load footer: %s", err)
 		return err

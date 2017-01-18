@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,10 +53,9 @@ type GorseConfig struct {
 	URIPrefix               string
 	CookieAuthenticationKey string
 	SessionName             string
-
-	LogFile string
-
-	WebRoot string
+	LogFile                 string
+	WebRoot                 string
+	TemplateDir             string
 }
 
 // DB is the connection to the database.
@@ -141,7 +141,6 @@ func main() {
 		log.SetOutput(logFh)
 	}
 
-	// Directory containing directories 'static' and 'template'.
 	if settings.WebRoot == "" {
 		log.Fatalf("You must provide a web root.")
 	}
@@ -151,6 +150,16 @@ func main() {
 		log.Fatalf("Unable to make webroot absolute: %s: %s", settings.WebRoot, err)
 	}
 	settings.WebRoot = webRoot
+
+	if settings.TemplateDir == "" {
+		log.Fatalf("You must provide a template directory")
+	}
+	templateDir, err := filepath.Abs(settings.TemplateDir)
+	if err != nil {
+		log.Fatalf("Unable to make template dir absolute: %s: %s",
+			settings.TemplateDir, err)
+	}
+	settings.TemplateDir = templateDir
 
 	sessionStore := sessions.NewCookieStore(
 		[]byte(settings.CookieAuthenticationKey))
@@ -194,14 +203,20 @@ func main() {
 
 // ServeHTTP handles an HTTP request. It is invoked by the fastcgi package in a
 // goroutine.
-func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
+func (h HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 	request *http.Request) {
-	log.Printf("Serving [%s] request from [%s] to path [%s]", request.Method,
-		request.RemoteAddr, request.URL.Path)
+
+	// If we're served through FastCGI then we will probably be given a request
+	// prefix. e.g., GET /gorse. Treat this as GET /. Strip the prefix.
+
+	origPath := request.URL.Path
+	request.URL.Path = strings.TrimPrefix(request.URL.Path, h.settings.URIPrefix)
+
+	log.Printf("Serving [%s] request from [%s] to path [%s] (originally %s)",
+		request.Method, request.RemoteAddr, request.URL.Path, origPath)
 
 	// Get existing session, or make a new one.
-	session, err := handler.sessionStore.Get(request,
-		handler.settings.SessionName)
+	session, err := h.sessionStore.Get(request, h.settings.SessionName)
 	if err != nil {
 		log.Printf("Session Get error: %s", err)
 		send500Error(rw, "Failed to get your session.")
@@ -224,25 +239,25 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 		Func RequestHandlerFunc
 	}
 
-	var handlers = []RequestHandler{
+	handlers := []RequestHandler{
 		// GET /
 		RequestHandler{
 			Method:      "GET",
-			PathPattern: "^" + handler.settings.URIPrefix + "/?$",
+			PathPattern: "^/?$",
 			Func:        handlerListItems,
 		},
 
 		// POST /update_read_flags
 		RequestHandler{
 			Method:      "POST",
-			PathPattern: "^" + handler.settings.URIPrefix + "/update_read_flags/?$",
+			PathPattern: "^/update_read_flags$",
 			Func:        handlerUpdateReadFlags,
 		},
 
 		// GET /static/*
 		RequestHandler{
 			Method:      "GET",
-			PathPattern: "^" + handler.settings.URIPrefix + "/static/",
+			PathPattern: "^/static/",
 			Func:        handlerStaticFiles,
 		},
 	}
@@ -261,7 +276,7 @@ func (handler HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 		}
 
 		if matched {
-			actionHandler.Func(rw, request, handler.settings, session)
+			actionHandler.Func(rw, request, h.settings, session)
 			// Note we don't session.Save() here as if we redirect the Save() won't
 			// take effect.
 			//
@@ -501,7 +516,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		ReadLater:        ReadLater,
 	}
 
-	err = renderPage(rw, "_list_items", listItemsPage)
+	err = renderPage(settings, rw, "_list_items", listItemsPage)
 	if err != nil {
 		log.Printf("Failure rendering page: %s", err)
 		send500Error(rw, "Failed to render page")
@@ -669,16 +684,19 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	settings *GorseConfig, session *sessions.Session) {
 	log.Printf("Serving static request [%s]", request.URL.Path)
 
-	// Set the dir we serve.
-	staticDir := http.Dir(filepath.Join(settings.WebRoot, "static"))
+	// Serve files from /WebRoot. At this point, GET /gorse.js goes to
+	// /WebRoot/gorse.js.
+	staticDir := http.Dir(settings.WebRoot)
 
 	// Create the fileserver handler that deals with the internals for us.
 	fileserverHandler := http.FileServer(staticDir)
 
-	// We want to serve up the directory without the global URI prefix. Since it
-	// is relative / may bare no resemblance to the request path.
-	strippedHandler := http.StripPrefix(settings.URIPrefix+"/static/",
-		fileserverHandler)
+	// Remove the prefix when serving requests.
+	//
+	// Requests reach this function as GET /static/gorse.js (any URIPrefix setting
+	// has already been stripped). To find files, we need to strip /static so from
+	// the filesever's perspective the request is GET /gorse.js
+	strippedHandler := http.StripPrefix("/static", fileserverHandler)
 
 	strippedHandler.ServeHTTP(rw, request)
 }
