@@ -22,11 +22,6 @@ elapsed. It considers a feed updated when it successfully fetches and parses a
 feed.
 
 
-## gorselib
-This is a library. It provides reading/parsing of the various formats (RSS,
-RDF, Atom), as well as functionality to generate RSS feeds.
-
-
 # Setup
 To set up the database:
 

@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/horgh/config"
-	"github.com/horgh/gorse/gorselib"
+	"github.com/horgh/rss"
 	_ "github.com/lib/pq"
 )
 
@@ -95,7 +95,9 @@ func main() {
 		}
 	}()
 
-	gorselib.SetQuiet(settings.Quiet != 0)
+	if settings.Quiet == 0 {
+		rss.SetVerbose(true)
+	}
 
 	// Retrieve our feeds from the database.
 	feeds, err := retrieveFeeds(db)
@@ -246,7 +248,7 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed) error {
 	}
 
 	// Parse the XML response.
-	channel, err := gorselib.ParseFeedXML(xmlData)
+	channel, err := rss.ParseFeedXML(xmlData)
 	if err != nil {
 		return fmt.Errorf("failed to parse XML of feed: %s", err)
 	}
@@ -339,7 +341,7 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 //
 // We return whether we actually performed an insert and if there was an error.
 func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
-	item *gorselib.Item) (bool, error) {
+	item *rss.Item) (bool, error) {
 	// Sanity check the item's information. We require at least a link to be set.
 	// Description may be blank. We also permit title to be blank.
 	if item.Link == "" {
@@ -382,7 +384,7 @@ VALUES($1, $2, $3, $4, $5)
 //
 // It does this by checking if the uri exists for the given feed id.
 func feedItemExists(db *sql.DB, feed *DBFeed,
-	item *gorselib.Item) (bool, error) {
+	item *rss.Item) (bool, error) {
 	// Check main table.
 	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
 	rows, err := db.Query(query, feed.ID, item.Link)
