@@ -1,30 +1,34 @@
-# Summary
+Gorse is an RSS reader. You provide it with RSS feeds to monitor, and its
+poller program, gorsepoll, pulls the contents of the feed into a database.
+Gorse itself provides an interface to view and read the feeds.
 
-Gorse is a web RSS reader. You provide it with RSS feeds to monitor, and its
-backend poller program, gorsepoll, pulls the contents of the feed into the local
-database. Gorse itself provides an interface to viewing and reading the contents
-of the feeds.
-
-Directories:
-
-  * gorse: A web frontend to a database of feeds/feed items
-  * gorsepoll: A utility to retrieve feed items and insert them into a
-    database
-  * gorselib: Library shared by the above.
+It can work with feeds in RSS, RDF, and Atom formats.
 
 
-# Gorsepoll
+# Components
 
-This is an RSS poll utility. It takes feeds to poll from a database,
-and populates the database with feed items.
+## gorse
+A web frontend to a database of feeds and their items/entries.
 
-Behaviour notes:
 
-  * We record a feed has been updated and will not try it again until
-    its update frequency period has elapsed only if we successfully
-    fetch it.
+## gorsepoll
+This is an RSS poller. It takes feeds to poll from a database, and populates
+the database with the items it finds.
 
-Setup:
+It should be run periodically, such as through cron.
+
+It tracks when it last updated a feed, and will not try it again until a period
+elapsed. It considers a feed updated when it successfully fetches and parses a
+feed.
+
+
+## gorselib
+This is a library. It provides reading/parsing of the various formats (RSS,
+RDF, Atom), as well as functionality to generate RSS feeds.
+
+
+# Setup
+To set up the database:
 
     createuser -D -E -P -R -S gorse
     createdb -E UTF8 -l en_CA.UTF-8 -O gorse gorse
