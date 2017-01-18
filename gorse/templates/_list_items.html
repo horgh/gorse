@@ -32,7 +32,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 			<li class="{{$rowClass}}">
 				<h1>
 					{{.FeedName}}
-					<a href="{{.Link}}">{{.Title}}</a>
+					<a href="{{.Link}}">{{if len .Title}}{{.Title}}{{else}}No title{{end}}</a>
 					<span class="date">
 						({{.PublicationDate}})
 					</span>

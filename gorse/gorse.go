@@ -423,13 +423,6 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			return
 		}
 
-		// Ensure we say no title if there is no title. This is important for one
-		// thing so that there is something in the link content. TODO: We could do
-		// this in the template.
-		if len(title) == 0 {
-			title = "No title"
-		}
-
 		description, err := sanitiseItemText(item.Description)
 		if err != nil {
 			log.Printf("Failed to sanitise description: %s", err)
@@ -665,8 +658,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// TODO: Should we get path from the config?
-	uri := fmt.Sprintf("/gorse/?sort-order=%s&user-id=%d&read-state=%s",
+	uri := fmt.Sprintf("%s/?sort-order=%s&user-id=%d&read-state=%s",
+		settings.URIPrefix,
 		url.QueryEscape(request.PostForm.Get("sort-order")),
 		userID,
 		url.QueryEscape(readState.String()))
