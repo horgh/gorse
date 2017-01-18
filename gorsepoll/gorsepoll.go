@@ -40,6 +40,24 @@ type Config struct {
 	Quiet  int64
 }
 
+// DBFeed holds the information from the database about a feed.
+type DBFeed struct {
+	// Database ID.
+	ID int64
+
+	// Name.
+	Name string
+
+	// URI to the feed.
+	URI string
+
+	// Update frequency in seconds.
+	UpdateFrequencySeconds int64
+
+	// Last time we updated.
+	LastUpdateTime time.Time
+}
+
 func main() {
 	singleFeed := flag.String("feed-name", "",
 		"Single feed name to process. Process all feeds if not given.")
@@ -80,7 +98,7 @@ func main() {
 	gorselib.SetQuiet(settings.Quiet != 0)
 
 	// Retrieve our feeds from the database.
-	feeds, err := gorselib.RetrieveFeeds(db)
+	feeds, err := retrieveFeeds(db)
 	if err != nil {
 		log.Fatalf("Failed to retrieve feeds: %s", err)
 	}
@@ -88,7 +106,7 @@ func main() {
 	// Are we limiting this run to one feed? If so, find it and make a new slice
 	// with only this feed in it.
 	if len(*singleFeed) > 0 {
-		feedsSingle := []gorselib.DBFeed{}
+		feedsSingle := []DBFeed{}
 		for _, feed := range feeds {
 			if feed.Name == *singleFeed {
 				feedsSingle = append(feedsSingle, feed)
@@ -113,6 +131,43 @@ func main() {
 	}
 }
 
+// retrieveFeeds finds feeds from the database.
+func retrieveFeeds(db *sql.DB) ([]DBFeed, error) {
+	query := `
+SELECT
+id, name, uri, update_frequency_seconds, last_update_time
+FROM rss_feed
+WHERE active = true
+ORDER BY name
+`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query for feeds: %s", err)
+	}
+
+	var feeds []DBFeed
+
+	for rows.Next() {
+		feed := DBFeed{}
+
+		err := rows.Scan(&feed.ID, &feed.Name, &feed.URI,
+			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime)
+		if err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("failed to scan row: %s", err)
+		}
+
+		feeds = append(feeds, feed)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failure fetching rows: %s", err)
+	}
+
+	return feeds, nil
+}
+
 // processFeeds processes each feed in turn.
 //
 // We look at every feed, and retrieve it if it needs to be updated.
@@ -121,7 +176,7 @@ func main() {
 // retrieved it.
 //
 // If there was an error, we return an error, otherwise we return nil.
-func processFeeds(config *Config, db *sql.DB, feeds []gorselib.DBFeed,
+func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 	forceUpdate bool) error {
 
 	feedsUpdated := 0
@@ -183,7 +238,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []gorselib.DBFeed,
 // updateFeed fetches, parses, and stores the new items in a feed.
 //
 // We should have already determined we need to perform an update.
-func updateFeed(config *Config, db *sql.DB, feed *gorselib.DBFeed) error {
+func updateFeed(config *Config, db *sql.DB, feed *DBFeed) error {
 	// Retrieve the feed body (XML, generally).
 	xmlData, err := retrieveFeed(feed)
 	if err != nil {
@@ -232,7 +287,7 @@ func updateFeed(config *Config, db *sql.DB, feed *gorselib.DBFeed) error {
 }
 
 // retrieveFeed fetches the raw feed content.
-func retrieveFeed(feed *gorselib.DBFeed) ([]byte, error) {
+func retrieveFeed(feed *DBFeed) ([]byte, error) {
 	// Retrieve the feed via an HTTP call.
 
 	// NOTE: We set up a http.Transport to use TLS settings. Then we set the
@@ -283,7 +338,7 @@ func retrieveFeed(feed *gorselib.DBFeed) ([]byte, error) {
 // not already present.
 //
 // We return whether we actually performed an insert and if there was an error.
-func recordFeedItem(config *Config, db *sql.DB, feed *gorselib.DBFeed,
+func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
 	item *gorselib.Item) (bool, error) {
 	// Sanity check the item's information. We require at least a link to be set.
 	// Description may be blank. We also permit title to be blank.
@@ -326,7 +381,7 @@ VALUES($1, $2, $3, $4, $5)
 // feedItemExists checks if this item is already recorded in the database.
 //
 // It does this by checking if the uri exists for the given feed id.
-func feedItemExists(db *sql.DB, feed *gorselib.DBFeed,
+func feedItemExists(db *sql.DB, feed *DBFeed,
 	item *gorselib.Item) (bool, error) {
 	// Check main table.
 	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
@@ -380,7 +435,7 @@ func feedItemExists(db *sql.DB, feed *gorselib.DBFeed,
 }
 
 // recordFeedUpdate sets the last feed update time to right now.
-func recordFeedUpdate(db *sql.DB, feed *gorselib.DBFeed) error {
+func recordFeedUpdate(db *sql.DB, feed *DBFeed) error {
 	query := `UPDATE rss_feed SET last_update_time = NOW() WHERE id = $1`
 
 	_, err := db.Exec(query, feed.ID)
