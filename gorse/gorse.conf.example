@@ -30,7 +30,9 @@ SessionName = gorse
 # Path to file to log to. - for stdout.
 LogFile = -
 
-# Path to directory containing web assets and templates. It should have the
-# subdirectories 'static' and 'templates'. It will be made absolute if it is
-# not.
-WebRoot = .
+# Path to directory containing web assets and templates. This should contain
+# the files found in the 'static' directory. It will be made absolute.
+WebRoot = static
+
+# Path to the directory containing HTML templates. It will be made absolute.
+TemplateDir = templates
