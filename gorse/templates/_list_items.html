@@ -17,7 +17,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 {{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort descending</a>{{end}}
 </p>
 
-<form action="{{.Path}}update_read_flags"
+<form action="{{.Path}}/update_read_flags"
 	method="POST"
 	autocomplete="off"
 	id="list-items-form"

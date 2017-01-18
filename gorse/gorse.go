@@ -496,7 +496,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	listItemsPage := ListItemsPage{
 		Items:            htmlItems,
 		SuccessMessages:  successMessages,
-		Path:             request.URL.Path,
+		Path:             settings.URIPrefix,
 		SortOrder:        sortRaw,
 		ReverseSortOrder: reverseSortOrder,
 		TotalItems:       totalItems,
@@ -663,6 +663,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		url.QueryEscape(request.PostForm.Get("sort-order")),
 		userID,
 		url.QueryEscape(readState.String()))
+
+	log.Printf("Redirecting to %s", uri)
 
 	http.Redirect(rw, request, uri, http.StatusFound)
 }
