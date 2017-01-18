@@ -22,74 +22,79 @@ Gorse.log = function(msg) {
 // - none, read, archive
 Gorse.toggle_read_state = function(item_li) {
 	// Read -> archive.
-	if ($(item_li).hasClass('read')) {
-		$(item_li).removeClass('read');
-		$(item_li).addClass('archive');
+	if (item_li.classList.contains('read')) {
+		item_li.classList.remove('read');
+		item_li.classList.add('archive');
 
-		$('input.state-change', item_li).attr('name', 'archive-item');
+		var state_change = item_li.querySelector('.state-change');
+		state_change.setAttribute('name', 'archive-item');
+
 		return;
 	}
 
 	// Archive -> none.
-	if ($(item_li).hasClass('archive')) {
-		$(item_li).removeClass('archive');
+	if (item_li.classList.contains('archive')) {
+		item_li.classList.remove('archive');
 
-		$('input.state-change', item_li).remove();
+		var state_change = item_li.querySelector('.state-change');
+		state_change.remove();
+
 		return;
 	}
 
 	// None -> read
-	$(item_li).addClass('read');
 
-	var read_ele = $('<input>').attr({
-		'type':  'hidden',
-		'name':  'read-item',
-		'class': 'state-change',
-		'value': $('.item_id', item_li).val()
-	});
+	item_li.classList.add('read');
 
-	$(item_li).append(read_ele);
+
+	var state_change = document.createElement('input');
+
+	state_change.setAttribute('type', 'hidden');
+	state_change.setAttribute('name', 'read-item');
+
+	state_change.classList.add('state-change');
+
+	var id_ele = item_li.querySelector('.item_id');
+	state_change.value = id_ele.value
+
+	item_li.appendChild(state_change);
 };
 
 // Determine how many items we have selected. Update a displayed counter.
 Gorse.update_counts = function() {
 	// Count how many we have selected.
-	var count = $('input.state-change').length;
+	var count = document.querySelectorAll('.state-change').length;
 
 	// Display the counter in the save button.
 	var label = 'Save (' + count + ')';
-	$('button#update-flags-top').text(label);
+
+	var save_button = document.getElementById('update-flags-top');
+	save_button.textContent = label;
 };
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
 	// Add a click handler to all feed item rows.
-	$('ul#items > li').each(function(i, li) {
-		$(li).click(function() {
-			Gorse.toggle_read_state($(this));
-			Gorse.update_counts();
-		});
-	});
 
-	// Hide the list of feed information by default.
-	$('ul#feeds').hide();
+	var items = document.querySelectorAll("#items > li");
 
-	// Setup the 'feed expand' link.
-	$('a.expand_feeds')
-		.text('+ Expand')
-		.click(function(evt) {
-			evt.preventDefault();
+	for (var i = 0; i < items.length; i++) {
+		var li = items.item(i);
 
-			if ($(this).text() === '+ Expand') {
-				$(this).text('- Collapse');
-				$('#feeds').show(400);
-			} else {
-				$(this).text('+ Expand');
-				$('#feeds').hide(400);
-			}
-		});
+		(function(li) {
+			li.addEventListener('click', function() {
+				Gorse.toggle_read_state(li);
+				Gorse.update_counts();
+			})
+		})(li);
+	}
 
 	// When we click the save button, submit the form with our read elements.
-	$('button#update-flags-top').click(function() {
-		$('form#list-items-form').submit();
+
+	var save_button = document.getElementById('update-flags-top');
+
+	save_button.addEventListener('click', function() {
+		var items_form = document.getElementById('list-items-form');
+
+		items_form.submit();
 	});
 });
