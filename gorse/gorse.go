@@ -344,6 +344,15 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
+	// Our display timezone location.
+	location, err := time.LoadLocation(settings.DisplayTimeZone)
+	if err != nil {
+		log.Printf("Failed to load time zone location [%s]: %s",
+			settings.DisplayTimeZone, err)
+		send500Error(rw, "Unable to load timezone information")
+		return
+	}
+
 	// Set up additional information about each item. Specifically we want to set
 	// a string timestamp and do some formatting.
 
@@ -383,7 +392,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			ID:              item.ID,
 			FeedName:        item.FeedName,
 			Title:           title,
-			PublicationDate: item.PublicationDate.Format(time.RFC1123Z),
+			PublicationDate: item.PublicationDate.In(location).Format(time.RFC1123Z),
 			// Make an HTML version of description. We set it as type HTML so the
 			// template execution knows not to re-encode it. We want to control the
 			// encoding more carefully for making links of URLs, for one.

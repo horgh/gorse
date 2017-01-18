@@ -19,12 +19,10 @@ type DBItem struct {
 	FeedID          int64
 	PublicationDate time.Time
 
-	// Info from the feed table.
-	// TODO: Does this belong here?
+	// Name from the rss_feed table.
 	FeedName string
 
 	// Read state from rss_item_state table
-	// TODO: Does this belong here?
 	ReadState string
 }
 
@@ -162,13 +160,6 @@ COALESCE(ris.user_id, $2) = $3
 		return nil, err
 	}
 
-	// Our display timezone location.
-	location, err := time.LoadLocation(settings.DisplayTimeZone)
-	if err != nil {
-		log.Printf("Failed to load time zone location [%s]", settings.DisplayTimeZone)
-		return nil, err
-	}
-
 	var items []DBItem
 	for rows.Next() {
 		item := DBItem{}
@@ -180,10 +171,6 @@ COALESCE(ris.user_id, $2) = $3
 			_ = rows.Close()
 			return nil, err
 		}
-
-		// Set time to the display timezone.
-		// TODO: Does this belong here?
-		item.PublicationDate = item.PublicationDate.In(location)
 
 		items = append(items, item)
 	}
