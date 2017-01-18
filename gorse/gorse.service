@@ -1,0 +1,11 @@
+[Unit]
+Requires=network.target
+After=network.target
+
+[Service]
+User=gorse
+Group=gorse
+ExecStart=/path/to/gorse -config /path/to/gorse.conf -log-file /var/log/gorse.log -www-path /path/to/www
+
+[Install]
+WantedBy=multi-user.target
