@@ -21,6 +21,7 @@ import (
 	"net/http/fcgi"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"sync"
@@ -51,6 +52,10 @@ type GorseConfig struct {
 	URIPrefix               string
 	CookieAuthenticationKey string
 	SessionName             string
+
+	LogFile string
+
+	WebRoot string
 }
 
 // DB is the connection to the database.
@@ -99,47 +104,55 @@ func main() {
 	log.SetFlags(log.Ldate | log.Ltime)
 
 	configPath := flag.String("config", "", "Path to a configuration file.")
-	logPath := flag.String("log-file", "", "Path to a log file.")
-	wwwPath := flag.String("www-path", "",
-		"Path to directory containing assets. This directory must contain the static and templates directories. We change directory here at startup.")
+
 	flag.Parse()
 
 	if len(*configPath) == 0 {
-		log.Print("You must specify a configuration file.")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-	if len(*logPath) == 0 {
-		log.Print("You must specify a log file.")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-	if len(*wwwPath) == 0 {
-		log.Print("You must specify a www path.")
+		fmt.Println("You must specify a configuration file.")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	// Open log file. Don't use os.Create() because that truncates.
-	logFh, err := os.OpenFile(*logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %s: %s", *logPath, err)
-	}
-	log.SetOutput(logFh)
-
-	// chdir to the www path so we can get what we need to serve up.
-	err = os.Chdir(*wwwPath)
-	if err != nil {
-		log.Fatalf("Unable to chdir to www directory: %s: %s", *wwwPath, err)
-	}
-
-	var settings GorseConfig
-	err = config.GetConfig(*configPath, &settings)
+	settings := GorseConfig{}
+	err := config.GetConfig(*configPath, &settings)
 	if err != nil {
 		log.Fatalf("Failed to retrieve config: %s", err)
 	}
 
-	var sessionStore = sessions.NewCookieStore(
+	if settings.LogFile == "" {
+		log.Fatalf("You must provide a log file.")
+	}
+
+	if settings.LogFile != "-" {
+		// Open log file. Don't use os.Create() because that truncates.
+		logFh, err := os.OpenFile(settings.LogFile,
+			os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if err != nil {
+			log.Fatalf("Failed to open log file: %s: %s", settings.LogFile, err)
+		}
+
+		defer func() {
+			err := logFh.Close()
+			if err != nil {
+				log.Printf("Log file: Close: %s: %s", settings.LogFile, err)
+			}
+		}()
+
+		log.SetOutput(logFh)
+	}
+
+	// Directory containing directories 'static' and 'template'.
+	if settings.WebRoot == "" {
+		log.Fatalf("You must provide a web root.")
+	}
+
+	webRoot, err := filepath.Abs(settings.WebRoot)
+	if err != nil {
+		log.Fatalf("Unable to make webroot absolute: %s: %s", settings.WebRoot, err)
+	}
+	settings.WebRoot = webRoot
+
+	sessionStore := sessions.NewCookieStore(
 		[]byte(settings.CookieAuthenticationKey))
 
 	hostPort := fmt.Sprintf("%s:%d", settings.ListenHost, settings.ListenPort)
@@ -657,16 +670,15 @@ func handlerStaticFiles(rw http.ResponseWriter, request *http.Request,
 	log.Printf("Serving static request [%s]", request.URL.Path)
 
 	// Set the dir we serve.
-	// TODO: Possibly we should get this from a config and use an absolute
-	//   path?
-	var staticDir = http.Dir("./static")
+	staticDir := http.Dir(filepath.Join(settings.WebRoot, "static"))
 
 	// Create the fileserver handler that deals with the internals for us.
-	var fileserverHandler = http.FileServer(staticDir)
+	fileserverHandler := http.FileServer(staticDir)
 
 	// We want to serve up the directory without the global URI prefix. Since it
 	// is relative / may bare no resemblance to the request path.
-	var strippedHandler = http.StripPrefix(settings.URIPrefix+"/static/",
+	strippedHandler := http.StripPrefix(settings.URIPrefix+"/static/",
 		fileserverHandler)
+
 	strippedHandler.ServeHTTP(rw, request)
 }

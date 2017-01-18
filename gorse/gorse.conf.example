@@ -26,3 +26,11 @@ CookieAuthenticationKey =
 
 # our session name.
 SessionName = gorse
+
+# Path to file to log to. - for stdout.
+LogFile = -
+
+# Path to directory containing web assets and templates. It should have the
+# subdirectories 'static' and 'templates'. It will be made absolute if it is
+# not.
+WebRoot = .

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=gorse
 Group=gorse
-ExecStart=/path/to/gorse -config /path/to/gorse.conf -log-file /var/log/gorse.log -www-path /path/to/www
+ExecStart=/path/to/gorse -config /path/to/gorse.conf
 
 [Install]
 WantedBy=multi-user.target
