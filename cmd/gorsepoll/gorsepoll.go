@@ -208,6 +208,10 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 			log.Printf("Updating feed [%s]", feed.Name)
 		}
 
+		// Track when we update the feed. We want a time just before we do so as we
+		// will only accept items after this time next time.
+		updateTime := time.Now()
+
 		err := updateFeed(config, db, &feed)
 		if err != nil {
 			log.Printf("Failed to update feed: %s: %s", feed.Name, err)
@@ -221,7 +225,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 		// Record that we have performed an update of this feed. Do this after we
 		// have successfully updated the feed so as to ensure we try repeatedly in
 		// case of transient errors e.g. if network is down.
-		err = recordFeedUpdate(db, &feed)
+		err = recordFeedUpdate(db, &feed, updateTime)
 		if err != nil {
 			return fmt.Errorf("failed to record update on feed [%s]: %s", feed.Name,
 				err)
@@ -336,10 +340,25 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 	return body, nil
 }
 
-// recordFeedItem inserts the feed item information into the database if it is
-// not already present.
+// recordFeedItem inserts the feed item information into the database.
 //
 // We return whether we actually performed an insert and if there was an error.
+//
+// We store the item if:
+//
+// - The item is not yet present in the database
+//
+// - And the item's publication date is on or after the last time we updated the
+//   feed.
+//
+// We skip items older than the last update time for a couple reasons. First,
+// when we first add a feed, we don't want a large number of items to suddenly
+// appear into people's feed. In some cases this can lead to 50-100 items going
+// back a long time. Second, occasionally feed items IDs/links change, and this
+// too can lead to a large number of items appearing needing to be stored, again
+// leading to polluted feeds. Restricting to only items since the last update
+// limits both of these (assuming when we add a feed that we set the last update
+// time to $now).
 func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
 	item *rss.Item) (bool, error) {
 	// Sanity check the item's information. We require at least a link to be set.
@@ -356,6 +375,14 @@ func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
 	}
 
 	if exists {
+		return false, nil
+	}
+
+	if item.PubDate.Before(feed.LastUpdateTime) {
+		if config.Quiet == 0 {
+			log.Printf("Skipping recording item from feed [%s] due to its update time (%s): %s",
+				feed.Name, item.PubDate, item.Title)
+		}
 		return false, nil
 	}
 
@@ -436,11 +463,11 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 	return false, nil
 }
 
-// recordFeedUpdate sets the last feed update time to right now.
-func recordFeedUpdate(db *sql.DB, feed *DBFeed) error {
-	query := `UPDATE rss_feed SET last_update_time = NOW() WHERE id = $1`
+// recordFeedUpdate sets the last feed update time.
+func recordFeedUpdate(db *sql.DB, feed *DBFeed, updateTime time.Time) error {
+	query := `UPDATE rss_feed SET last_update_time = $1 WHERE id = $2`
 
-	_, err := db.Exec(query, feed.ID)
+	_, err := db.Exec(query, updateTime, feed.ID)
 	if err != nil {
 		return fmt.Errorf("failed to record feed update for feed id [%d] name [%s]: %s",
 			feed.ID, feed.Name, err)
