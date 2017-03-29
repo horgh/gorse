@@ -61,10 +61,9 @@ type DBFeed struct {
 func main() {
 	singleFeed := flag.String("feed-name", "",
 		"Single feed name to process. Process all feeds if not given.")
-	configPath := flag.String("config-file", "",
-		"Path to a configuration file.")
-	forceUpdate := flag.Bool("force-update", false,
-		"Force updates by ignoring the last update time on feeds.")
+	configPath := flag.String("config", "", "Path to the configuration file.")
+	ignorePollTimes := flag.Bool("ignore-poll-times", false, "Ignore the last polled times. This causes us to poll feeds even if we recently polled them.")
+	ignorePublicationTimes := flag.Bool("ignore-publication-times", false, "Ignore publication times. Normally we filter items from a feed to only record items since the last we've seen. Enabling this option causes us to record items based only on whether we've seen their URL.")
 
 	flag.Parse()
 
@@ -127,7 +126,8 @@ func main() {
 		feeds = feedsSingle
 	}
 
-	err = processFeeds(&settings, db, feeds, *forceUpdate)
+	err = processFeeds(&settings, db, feeds, *ignorePollTimes,
+		*ignorePublicationTimes)
 	if err != nil {
 		log.Fatal("Failed to process feed(s)")
 	}
@@ -179,14 +179,14 @@ ORDER BY name
 //
 // If there was an error, we return an error, otherwise we return nil.
 func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
-	forceUpdate bool) error {
+	ignorePollTimes, ignorePublicationTimes bool) error {
 
 	feedsUpdated := 0
 
 	for _, feed := range feeds {
 		// Check if we need to update. We may be always forcing an update. If not,
 		// we decide based on when we last updated the feed.
-		if !forceUpdate {
+		if !ignorePollTimes {
 			timeSince := time.Since(feed.LastUpdateTime)
 
 			if config.Quiet == 0 {
@@ -213,7 +213,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 		// we poll.
 		updateTime := time.Now()
 
-		err := updateFeed(config, db, &feed)
+		err := updateFeed(config, db, &feed, ignorePublicationTimes)
 		if err != nil {
 			log.Printf("Failed to update feed: %s: %s", feed.Name, err)
 			continue
@@ -245,7 +245,8 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 // updateFeed fetches, parses, and stores the new items in a feed.
 //
 // We should have already determined we need to perform an update.
-func updateFeed(config *Config, db *sql.DB, feed *DBFeed) error {
+func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
+	ignorePublicationTimes bool) error {
 	// Retrieve and parse the feed body (XML, generally).
 
 	xmlData, err := retrieveFeed(feed)
@@ -278,7 +279,8 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed) error {
 
 	recordedCount := 0
 	for _, item := range channel.Items {
-		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime)
+		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime,
+			ignorePublicationTimes)
 		if err != nil {
 			return fmt.Errorf("failed to record feed item title [%s] for feed [%s]: %s",
 				item.Title, feed.Name, err)
@@ -437,7 +439,7 @@ func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
 // when a feed's URLs change, and also when I first added a feed it would mean
 // a large number of items all at once.
 func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
-	cutoffTime time.Time) (bool, error) {
+	cutoffTime time.Time, ignorePublicationTimes bool) (bool, error) {
 	// Sanity check the item's information. We require at least a link to be set.
 	// Description may be blank. We also permit title to be blank.
 	if item.Link == "" {
@@ -462,7 +464,7 @@ func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 	// It looks like we don't have it stored. Decide whether we should store it
 	// based on when it was published.
 
-	if item.PubDate.Before(cutoffTime) {
+	if !ignorePublicationTimes && item.PubDate.Before(cutoffTime) {
 		if config.Quiet == 0 {
 			log.Printf("Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s",
 				feed.Name, item.PubDate, cutoffTime, item.Title)
