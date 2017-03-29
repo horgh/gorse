@@ -28,7 +28,7 @@ import (
 
 	"github.com/horgh/config"
 	"github.com/horgh/rss"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // Config holds runtime configuration info.
@@ -209,7 +209,8 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 		}
 
 		// Track when we update the feed. We want a time just before we do so as we
-		// will only accept items after this time next time.
+		// will only accept items after this time next time. This is the time when
+		// we poll.
 		updateTime := time.Now()
 
 		err := updateFeed(config, db, &feed)
@@ -245,28 +246,39 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 //
 // We should have already determined we need to perform an update.
 func updateFeed(config *Config, db *sql.DB, feed *DBFeed) error {
-	// Retrieve the feed body (XML, generally).
+	// Retrieve and parse the feed body (XML, generally).
+
 	xmlData, err := retrieveFeed(feed)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve feed: %s", err)
 	}
 
-	// Parse the XML response.
 	channel, err := rss.ParseFeedXML(xmlData)
 	if err != nil {
 		return fmt.Errorf("failed to parse XML of feed: %s", err)
 	}
 
-	// Record each item in the feed.
+	if config.Quiet == 0 {
+		log.Printf("Fetched %d item(s) for feed [%s]", len(channel.Items), feed.Name)
+	}
+
+	// Determine when we accept items starting from. See recordFeedItem() for
+	// more information on this.
+	cutoffTime, err := getFeedCutoffTime(db, feed)
+	if err != nil {
+		return fmt.Errorf("unable to determine feed cutoff time: %s: %s", feed.Name,
+			err)
+	}
 
 	if config.Quiet == 0 {
-		log.Printf("Fetched %d item(s) for feed [%s]", len(channel.Items),
-			feed.Name)
+		log.Printf("Feed [%s] cutoff time: %s", feed.Name, cutoffTime)
 	}
+
+	// Record each item in the feed.
 
 	recordedCount := 0
 	for _, item := range channel.Items {
-		recorded, err := recordFeedItem(config, db, feed, &item)
+		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime)
 		if err != nil {
 			return fmt.Errorf("failed to record feed item title [%s] for feed [%s]: %s",
 				item.Title, feed.Name, err)
@@ -340,27 +352,92 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 	return body, nil
 }
 
-// recordFeedItem inserts the feed item information into the database.
+// Determine the time after which we will accept items from this feed.
 //
-// We return whether we actually performed an insert and if there was an error.
+// If we have at least one item from the feed already, then this time is the
+// most recent item's publication time.
+//
+// If we have no items yet, use the feed's last poll time.
+//
+// See recordFeedItem() for a more in depth explanation of why.
+func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
+	query := `SELECT MAX(publication_date) FROM rss_item WHERE rss_feed_id = $1`
+
+	rows, err := db.Query(query, feed.ID)
+	if err != nil {
+		return time.Time{},
+			fmt.Errorf("failed to query for newest publication date: %s", err)
+	}
+
+	// Our default is the last poll time if there is no item yet.
+	newestTime := feed.LastUpdateTime
+
+	for rows.Next() {
+		// We get null time if there's no item.
+		var nt pq.NullTime
+
+		if err := rows.Scan(&nt); err != nil {
+			_ = rows.Close()
+			return time.Time{}, fmt.Errorf("failed to scan row: %s", err)
+		}
+
+		if !nt.Valid {
+			continue
+		}
+
+		newestTime = nt.Time
+	}
+
+	if err := rows.Err(); err != nil {
+		return time.Time{}, fmt.Errorf("failure fetching rows: %s", err)
+	}
+
+	return newestTime, nil
+}
+
+// recordFeedItem inserts the feed item into the database.
+//
+// Return whether we actually performed an insert and if there was an error.
 //
 // We store the item if:
 //
-// - The item is not yet present in the database
+// - The item is not yet in the database
 //
-// - And the item's publication date is on or after the last time we updated the
-//   feed.
+// - The item's publication date meets our date requirements.
 //
-// We skip items older than the last update time for a couple reasons. First,
-// when we first add a feed, we don't want a large number of items to suddenly
-// appear into people's feed. In some cases this can lead to 50-100 items going
-// back a long time. Second, occasionally feed items IDs/links change, and this
-// too can lead to a large number of items appearing needing to be stored, again
-// leading to polluted feeds. Restricting to only items since the last update
-// limits both of these (assuming when we add a feed that we set the last update
-// time to $now).
-func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
-	item *rss.Item) (bool, error) {
+// The date requirements are: The item's publication date must be on or after
+// the date of the newest item we have from the feed. If we have no items from
+// the feed yet, this date will be the last time we have recorded for polling
+// the feed.
+//
+// The latter is so that when we first add a feed that we do not end up adding
+// many old items. When adding the feed, we say we last polled it at the time
+// of adding it, so we get items starting from that point.
+//
+// My previous choice of timing requirement was problematic. It was to only
+// accept items that were older than the last time we polled the feed. This was
+// problematic because a feed could have been published after we last polled it
+// and contain items prior to us polling it, such as if it collected a batch of
+// items every hour for example, and we happened to poll it halfway through the
+// hour.
+//
+// We skip items based on publication date for a couple reasons:
+//
+// - First, when we first add a feed, we don't want a large number of items to
+//   suddenly appear into people's feed. In some cases this can lead to 50-100
+//   items going back a long time.
+//
+// - Second, occasionally feed items IDs/links change, and this too can lead to
+//   a large number of items appearing needing to be stored, again leading to
+//   polluted feeds. For this we could also restrict based on GUID, but that is
+//   an optional element in an item.
+//
+// Previously I did not take publication date into account, and simply added
+// based on whether the feed's URL was stored yet. This had problems related to
+// when a feed's URLs change, and also when I first added a feed it would mean
+// a large number of items all at once.
+func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
+	cutoffTime time.Time) (bool, error) {
 	// Sanity check the item's information. We require at least a link to be set.
 	// Description may be blank. We also permit title to be blank.
 	if item.Link == "" {
@@ -375,13 +452,20 @@ func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed,
 	}
 
 	if exists {
+		if config.Quiet == 0 {
+			log.Printf("Skipping recording item from feed [%s] due to having it already: %s",
+				feed.Name, item.Title)
+		}
 		return false, nil
 	}
 
-	if item.PubDate.Before(feed.LastUpdateTime) {
+	// It looks like we don't have it stored. Decide whether we should store it
+	// based on when it was published.
+
+	if item.PubDate.Before(cutoffTime) {
 		if config.Quiet == 0 {
-			log.Printf("Skipping recording item from feed [%s] due to its update time (%s): %s",
-				feed.Name, item.PubDate, item.Title)
+			log.Printf("Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s",
+				feed.Name, item.PubDate, cutoffTime, item.Title)
 		}
 		return false, nil
 	}
@@ -416,8 +500,9 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
 	rows, err := db.Query(query, feed.ID, item.Link)
 	if err != nil {
-		return false, fmt.Errorf("Failed to check if item title [%s] exists for feed [%s]: %s",
-			item.Title, feed.Name, err)
+		return false,
+			fmt.Errorf("failed to check if item title [%s] exists for feed [%s]: %s",
+				item.Title, feed.Name, err)
 	}
 
 	// If we have a row, then the item exists.
@@ -464,6 +549,8 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 }
 
 // recordFeedUpdate sets the last feed update time.
+//
+// This is the time we last polled the feed.
 func recordFeedUpdate(db *sql.DB, feed *DBFeed, updateTime time.Time) error {
 	query := `UPDATE rss_feed SET last_update_time = $1 WHERE id = $2`
 
