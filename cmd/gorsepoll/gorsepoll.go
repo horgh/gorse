@@ -246,6 +246,10 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 		return fmt.Errorf("failed to retrieve feed: %s", err)
 	}
 
+	if err := storeFeedPayload(db, feed, xmlData); err != nil {
+		return fmt.Errorf("unable to store payload to database: %s", err)
+	}
+
 	channel, err := rss.ParseFeedXML(xmlData)
 	if err != nil {
 		return fmt.Errorf("failed to parse XML of feed: %s", err)
@@ -343,6 +347,25 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// Store the feed's payload, typically XML, into the database.
+//
+// We track the latest payload each time we fetch it. This is mainly so that I
+// have a sample set to examine/test with.
+//
+// It is possible the payload isn't a valid feed at this point or that we could
+// not process it. This is intentional. I want to be able to inspect the payload
+// if it failed.
+func storeFeedPayload(db *sql.DB, feed *DBFeed, payload []byte) error {
+	query := `UPDATE rss_feed SET last_payload = $1 WHERE id = $2`
+
+	if _, err := db.Exec(query, payload, feed.ID); err != nil {
+		return fmt.Errorf("failed to record payload for feed ID [%d] name [%s]: %s",
+			feed.ID, feed.Name, err)
+	}
+
+	return nil
 }
 
 // Determine the time after which we will accept items from this feed.
