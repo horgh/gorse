@@ -278,7 +278,8 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime,
 			ignorePublicationTimes)
 		if err != nil {
-			return fmt.Errorf("failed to record feed item title [%s] for feed [%s]: %s",
+			return fmt.Errorf(
+				"failed to record feed item title [%s] for feed [%s]: %s",
 				item.Title, feed.Name, err)
 		}
 
@@ -293,7 +294,7 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 	}
 
 	// Log if we recorded all items we received. Why? Because this may indicate
-	// that we missed some through not updating frequently enough.
+	// that we missed some through not polling frequently enough.
 	if recordedCount == len(channel.Items) {
 		log.Printf("Warning: recorded all items from feed [%s] (%d/%d)", feed.Name,
 			recordedCount, len(channel.Items))
@@ -479,10 +480,13 @@ func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 	// based on when it was published.
 
 	if !ignorePublicationTimes && item.PubDate.Before(cutoffTime) {
-		if config.Quiet == 0 {
-			log.Printf("Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s",
-				feed.Name, item.PubDate, cutoffTime, item.Title)
-		}
+		// For now I want to always output that this happened rather than only in
+		// verbose mode. I am wanting to see if there are items that are missed due
+		// to using a hard cutoff. If there are, then we using GUID, if available,
+		// may be one solution.
+		log.Printf(
+			"Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s: %s",
+			feed.Name, item.PubDate, cutoffTime, item.Title, item.Link)
 		return false, nil
 	}
 
