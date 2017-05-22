@@ -1,7 +1,6 @@
+// RSS feed poller.
 //
-// RSS feed fetcher.
-//
-// This program roughly works as follows:
+// This program works roughly as follows:
 // - Find RSS feeds from a database.
 // - For every RSS feed, if it was last fetched less than its update frequency
 //   ago, retrieve it and then record that a retrieval was done.
@@ -10,9 +9,8 @@
 //
 // This program is intended to be run periodically through something like cron.
 //
-// We try to ensure that we do not poll the rss feeds too much by recording a
+// We try to ensure that we do not poll the RSS feeds too much by recording a
 // last update time and update frequency if the feed includes such data.
-//
 package main
 
 import (
@@ -74,8 +72,7 @@ func main() {
 	}
 
 	var settings Config
-	err := config.GetConfig(*configPath, &settings)
-	if err != nil {
+	if err := config.GetConfig(*configPath, &settings); err != nil {
 		log.Fatalf("Failed to retrieve config: %s", err)
 	}
 
@@ -88,8 +85,7 @@ func main() {
 		log.Fatalf("Failed to connect to the database: %s", err)
 	}
 	defer func() {
-		err := db.Close()
-		if err != nil {
+		if err := db.Close(); err != nil {
 			log.Printf("Database close: %s", err)
 		}
 	}()
@@ -126,9 +122,8 @@ func main() {
 		feeds = feedsSingle
 	}
 
-	err = processFeeds(&settings, db, feeds, *ignorePollTimes,
-		*ignorePublicationTimes)
-	if err != nil {
+	if err := processFeeds(&settings, db, feeds, *ignorePollTimes,
+		*ignorePublicationTimes); err != nil {
 		log.Fatal("Failed to process feed(s)")
 	}
 }
@@ -152,9 +147,8 @@ ORDER BY name
 	for rows.Next() {
 		feed := DBFeed{}
 
-		err := rows.Scan(&feed.ID, &feed.Name, &feed.URI,
-			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime)
-		if err != nil {
+		if err := rows.Scan(&feed.ID, &feed.Name, &feed.URI,
+			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan row: %s", err)
 		}
@@ -162,8 +156,7 @@ ORDER BY name
 		feeds = append(feeds, feed)
 	}
 
-	err = rows.Err()
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
@@ -213,8 +206,8 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 		// we poll.
 		updateTime := time.Now()
 
-		err := updateFeed(config, db, &feed, ignorePublicationTimes)
-		if err != nil {
+		if err := updateFeed(config, db, &feed,
+			ignorePublicationTimes); err != nil {
 			log.Printf("Failed to update feed: %s: %s", feed.Name, err)
 			continue
 		}
@@ -226,8 +219,7 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 		// Record that we have performed an update of this feed. Do this after we
 		// have successfully updated the feed so as to ensure we try repeatedly in
 		// case of transient errors e.g. if network is down.
-		err = recordFeedUpdate(db, &feed, updateTime)
-		if err != nil {
+		if err := recordFeedUpdate(db, &feed, updateTime); err != nil {
 			return fmt.Errorf("failed to record update on feed [%s]: %s", feed.Name,
 				err)
 		}
@@ -337,8 +329,7 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 	}
 
 	defer func() {
-		err := httpResponse.Body.Close()
-		if err != nil {
+		if err := httpResponse.Body.Close(); err != nil {
 			log.Printf("HTTP response body close: %s", err)
 		}
 	}()
@@ -479,9 +470,8 @@ INSERT INTO rss_item
 (title, description, link, publication_date, rss_feed_id)
 VALUES($1, $2, $3, $4, $5)
 `
-	_, err = db.Exec(query, item.Title, item.Description, item.Link, item.PubDate,
-		feed.ID)
-	if err != nil {
+	if _, err := db.Exec(query, item.Title, item.Description, item.Link,
+		item.PubDate, feed.ID); err != nil {
 		return false, fmt.Errorf("failed to add item with title [%s]: %s",
 			item.Title, err)
 	}
@@ -514,8 +504,7 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 		count++
 	}
 
-	err = rows.Err()
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
@@ -538,8 +527,7 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 		count++
 	}
 
-	err = rows.Err()
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
@@ -556,8 +544,7 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 func recordFeedUpdate(db *sql.DB, feed *DBFeed, updateTime time.Time) error {
 	query := `UPDATE rss_feed SET last_update_time = $1 WHERE id = $2`
 
-	_, err := db.Exec(query, updateTime, feed.ID)
-	if err != nil {
+	if _, err := db.Exec(query, updateTime, feed.ID); err != nil {
 		return fmt.Errorf("failed to record feed update for feed id [%d] name [%s]: %s",
 			feed.ID, feed.Name, err)
 	}
