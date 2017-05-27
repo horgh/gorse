@@ -27,5 +27,8 @@ To set up the database:
 
     createuser -D -E -P -R -S gorse
     createdb -E UTF8 -l en_CA.UTF-8 -O gorse gorse
-    cat schema.sql upgrade1.sql feeds.sql > install.sql
+    cat schema.sql upgrade*.sql > install.sql
     psql < install.sql
+
+Then you have to set up feeds. Currently this can only be done through
+inserts to the rss_feed table.
