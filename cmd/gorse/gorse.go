@@ -31,6 +31,7 @@ import (
 	"github.com/gorilla/context"
 	"github.com/gorilla/sessions"
 	"github.com/horgh/config"
+	"github.com/horgh/gorse"
 	_ "github.com/lib/pq"
 )
 
@@ -84,18 +85,6 @@ type sortOrder int
 const (
 	sortAscending sortOrder = iota
 	sortDescending
-)
-
-// ReadState holds an item's state (rss_item_state table, read_state type).
-type ReadState int
-
-const (
-	// Unread means the item is not yet read.
-	Unread ReadState = iota
-	// Read means the item was read.
-	Read
-	// ReadLater means to save the item to read later.
-	ReadLater
 )
 
 const pageSize = 50
@@ -309,17 +298,6 @@ func send500Error(rw http.ResponseWriter, message string) {
 	_, _ = rw.Write([]byte("<h1>" + template.HTMLEscapeString(message) + "</h1>"))
 }
 
-// Turn read state into the enumerated type in the database (read_state).
-func (s ReadState) String() string {
-	if s == Unread {
-		return "unread"
-	}
-	if s == Read {
-		return "read"
-	}
-	return "read-later"
-}
-
 // handlerListItems handles a list RSS items request and builds an HTML
 // response.
 //
@@ -377,10 +355,10 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 
 	// We either view unread or read later items. Those marked read we never can
 	// see again currently.
-	readState := Unread
+	readState := gorse.Unread
 	requestedReadState := requestValues.Get("read-state")
 	if requestedReadState == "read-later" {
-		readState = ReadLater
+		readState = gorse.ReadLater
 	}
 
 	// Retrieve items from the database.
@@ -488,9 +466,9 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		NextPage         int
 		PreviousPage     int
 		UserID           int
-		ReadState        ReadState
-		Unread           ReadState
-		ReadLater        ReadState
+		ReadState        gorse.ReadState
+		Unread           gorse.ReadState
+		ReadLater        gorse.ReadState
 	}
 
 	listItemsPage := ListItemsPage{
@@ -505,8 +483,8 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		PreviousPage:     prevPage,
 		UserID:           userID,
 		ReadState:        readState,
-		Unread:           Unread,
-		ReadLater:        ReadLater,
+		Unread:           gorse.Unread,
+		ReadLater:        gorse.ReadLater,
 	}
 
 	err = renderPage(settings, rw, "_list_items", listItemsPage)
@@ -558,10 +536,10 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 	// What read state were we viewing? This tells us where to go after. We
 	// either view unread or read later items. Those marked read we never can see
 	// again currently.
-	readState := Unread
+	readState := gorse.Unread
 	requestedReadState := request.PostForm.Get("read-state")
 	if requestedReadState == "read-later" {
-		readState = ReadLater
+		readState = gorse.ReadLater
 	}
 
 	// Set some read.
@@ -603,8 +581,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 
 			// Flag it read.
 
-			err = dbSetItemReadState(db, id, userID, Read)
-			if err != nil {
+			if err := gorse.DBSetItemReadState(db, id, userID,
+				gorse.Read); err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
 			}
@@ -633,8 +611,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
-			err = dbSetItemReadState(db, id, userID, ReadLater)
-			if err != nil {
+			if err := gorse.DBSetItemReadState(db, id, userID,
+				gorse.ReadLater); err != nil {
 				send500Error(rw, "Unable to update read flag for "+idStr)
 				return
 			}

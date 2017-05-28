@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/horgh/gorse"
 )
 
 // DBItem holds the information about an input/entry that is in the database.
@@ -88,7 +90,7 @@ func getDB(settings *Config) (*sql.DB, error) {
 // dbCountItems retrieves a count of items.
 //
 // This is for pagination.
-func dbCountItems(db *sql.DB, userID int, state ReadState) (int, error) {
+func dbCountItems(db *sql.DB, userID int, state gorse.ReadState) (int, error) {
 	query := `
 SELECT COUNT(1) AS count
 FROM rss_item ri
@@ -127,7 +129,7 @@ COALESCE(ris.user_id, $2) = $3
 // dbRetrieveFeedItems retrieves feed items from the database which are marked
 // a given state.
 func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
-	page, userID int, state ReadState) ([]DBItem, error) {
+	page, userID int, state gorse.ReadState) ([]DBItem, error) {
 
 	if page < 1 {
 		return nil, errors.New("invalid page number")
@@ -221,27 +223,6 @@ COALESCE(ris.user_id, $2) = $3
 	}
 
 	return DBItem{}, fmt.Errorf("item not found")
-}
-
-// dbSetItemReadState sets the given item's state in the database.
-func dbSetItemReadState(db *sql.DB, id int64, userID int,
-	state ReadState) error {
-	// Upsert.
-	query := `
-INSERT INTO rss_item_state
-(user_id, item_id, state)
-VALUES($1, $2, $3)
-ON CONFLICT (user_id, item_id) DO UPDATE
-SET state = $4
-`
-	_, err := db.Exec(query, userID, id, state.String(), state.String())
-	if err != nil {
-		log.Printf("Failed to set item id [%d] read: %s", id, err)
-		return err
-	}
-
-	log.Printf("Set item id [%d] %s", id, state)
-	return nil
 }
 
 // Record the item was read after having been archived.

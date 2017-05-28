@@ -12,14 +12,14 @@
 --;
 
 -- Update them to 'read'.
-INSERT INTO rss_item_state
-(state, item_id, user_id)
-SELECT
-'read', ri.id, 1
-FROM rss_item ri
-WHERE ri.id NOT IN (SELECT item_id FROM rss_item_state) AND
-ri.publication_date < '2017-05-21'
-;
+--INSERT INTO rss_item_state
+--(state, item_id, user_id)
+--SELECT
+--'read', ri.id, 1
+--FROM rss_item ri
+--WHERE ri.id NOT IN (SELECT item_id FROM rss_item_state) AND
+--ri.publication_date < '2017-05-21'
+--;
 
 -- Set all read by a feed.
 INSERT INTO rss_item_state

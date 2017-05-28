@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/horgh/config"
+	"github.com/horgh/gorse"
 	"github.com/horgh/rss"
 	"github.com/lib/pq"
 )
@@ -54,6 +55,14 @@ type DBFeed struct {
 
 	// Last time we updated.
 	LastUpdateTime time.Time
+
+	// Whether the feed is set to archive mode. Archive mode means that new items
+	// get recorded but set to read automatically. I find this useful for feeds I
+	// don't actively ever look at, but want to track them in case I need to at
+	// some point. For example, a feed I usually read through a different web
+	// interface, but if I fall behind on that web interface and can't go back far
+	// enough, then I might need to look at it through Gorse.
+	Archive bool
 }
 
 func main() {
@@ -132,7 +141,7 @@ func main() {
 func retrieveFeeds(db *sql.DB) ([]DBFeed, error) {
 	query := `
 SELECT
-id, name, uri, update_frequency_seconds, last_update_time
+id, name, uri, update_frequency_seconds, last_update_time, archive
 FROM rss_feed
 WHERE active = true
 ORDER BY name
@@ -148,7 +157,8 @@ ORDER BY name
 		feed := DBFeed{}
 
 		if err := rows.Scan(&feed.ID, &feed.Name, &feed.URI,
-			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime); err != nil {
+			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime,
+			&feed.Archive); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan row: %s", err)
 		}
@@ -496,11 +506,34 @@ func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 INSERT INTO rss_item
 (title, description, link, publication_date, rss_feed_id)
 VALUES($1, $2, $3, $4, $5)
+RETURNING id
 `
-	if _, err := db.Exec(query, item.Title, item.Description, item.Link,
-		item.PubDate, feed.ID); err != nil {
+	rows, err := db.Query(query, item.Title, item.Description, item.Link,
+		item.PubDate, feed.ID)
+	if err != nil {
 		return false, fmt.Errorf("failed to add item with title [%s]: %s",
 			item.Title, err)
+	}
+
+	var id int64
+
+	for rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return false, fmt.Errorf("failed to scan row: %s", err)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("failure fetching rows: %s", err)
+	}
+
+	if feed.Archive {
+		// We are currently single user.
+		userID := 1
+		if err := gorse.DBSetItemReadState(db, id, userID, gorse.Read); err != nil {
+			return false, fmt.Errorf("failure setting item read state: %s", err)
+		}
 	}
 
 	if config.Quiet == 0 {
