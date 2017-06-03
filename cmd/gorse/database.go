@@ -20,6 +20,7 @@ type DBItem struct {
 	// Feed database ID.
 	FeedID          int64
 	PublicationDate time.Time
+	GUID            string
 
 	// Name from the rss_feed table.
 	FeedName string
@@ -112,14 +113,12 @@ COALESCE(ris.user_id, $2) = $3
 	}
 
 	var count int
-	err = rows.Scan(&count)
-	if err != nil {
+	if err := rows.Scan(&count); err != nil {
 		_ = rows.Close()
 		return -1, err
 	}
 
-	err = rows.Close()
-	if err != nil {
+	if err := rows.Close(); err != nil {
 		return -1, fmt.Errorf("problem closing rows: %s", err)
 	}
 
@@ -137,7 +136,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 
 	query := `
 SELECT
-rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date
+rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date, ri.guid
 FROM rss_item ri
 LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
@@ -167,7 +166,7 @@ COALESCE(ris.user_id, $2) = $3
 		item := DBItem{}
 
 		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.Link,
-			&item.Description, &item.PublicationDate)
+			&item.Description, &item.PublicationDate, &item.GUID)
 		if err != nil {
 			log.Printf("Failed to scan row information: %s", err)
 			_ = rows.Close()
@@ -177,8 +176,7 @@ COALESCE(ris.user_id, $2) = $3
 		items = append(items, item)
 	}
 
-	err = rows.Err()
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
@@ -190,7 +188,7 @@ COALESCE(ris.user_id, $2) = $3
 func dbGetItem(db *sql.DB, itemID int64, userID int) (DBItem, error) {
 	query := `
 SELECT
-ri.id, ri.title, ri.description, ri.link, ri.publication_date,
+ri.id, ri.title, ri.description, ri.link, ri.publication_date, ri.guid,
 ri.rss_feed_id, rf.name, COALESCE(ris.state, 'unread')
 FROM rss_item ri
 JOIN rss_feed rf ON ri.rss_feed_id = rf.id
@@ -207,7 +205,8 @@ COALESCE(ris.user_id, $2) = $3
 		item := DBItem{}
 
 		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
-			&item.PublicationDate, &item.FeedID, &item.FeedName, &item.ReadState)
+			&item.PublicationDate, &item.GUID, &item.FeedID, &item.FeedName,
+			&item.ReadState)
 		if err != nil {
 			_ = rows.Close()
 			return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
@@ -217,8 +216,7 @@ COALESCE(ris.user_id, $2) = $3
 		return item, nil
 	}
 
-	err = rows.Err()
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return DBItem{}, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
