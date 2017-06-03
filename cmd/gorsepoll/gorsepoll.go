@@ -63,6 +63,9 @@ type DBFeed struct {
 	// interface, but if I fall behind on that web interface and can't go back far
 	// enough, then I might need to look at it through Gorse.
 	Archive bool
+
+	// Has the feed ever been polled?
+	HasBeenPolled bool
 }
 
 func main() {
@@ -163,6 +166,14 @@ ORDER BY name
 			return nil, fmt.Errorf("failed to scan row: %s", err)
 		}
 
+		polled, err := hasFeedBeenPolled(db, feed.ID)
+		if err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("unable to check if feed has been polled: %s", err)
+		}
+
+		feed.HasBeenPolled = polled
+
 		feeds = append(feeds, feed)
 	}
 
@@ -171,6 +182,30 @@ ORDER BY name
 	}
 
 	return feeds, nil
+}
+
+// Decide whether we've polled a feed before.
+//
+// Rather than have any explicit flag for this I go by whether we have any items
+// recorded for it.
+func hasFeedBeenPolled(db *sql.DB, id int64) (bool, error) {
+	query := `SELECT 1 FROM rss_item WHERE rss_feed_id = $1 LIMIT 1`
+	count, err := countRowsProduced(db, query, id)
+	if err != nil {
+		return false, fmt.Errorf("unable to query rss_item: %s", err)
+	}
+
+	if count > 0 {
+		return true, nil
+	}
+
+	query = `SELECT 1 FROM rss_item_archive WHERE rss_feed_id = $1 LIMIT 1`
+	count, err = countRowsProduced(db, query, id)
+	if err != nil {
+		return false, fmt.Errorf("unable to query rss_item: %s", err)
+	}
+
+	return count > 0, nil
 }
 
 // processFeeds processes each feed in turn.
@@ -269,7 +304,7 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 		log.Printf("Fetched %d item(s) for feed [%s]", len(channel.Items), feed.Name)
 	}
 
-	// Determine when we accept items starting from. See recordFeedItem() for
+	// Determine when we accept items starting from. See shouldRecordItem() for
 	// more information on this.
 	cutoffTime, err := getFeedCutoffTime(db, feed)
 	if err != nil {
@@ -285,6 +320,14 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 
 	recordedCount := 0
 	for _, item := range channel.Items {
+		// Sanity check the item's information. We require at least a link to be
+		// set. Description may be blank. We also permit title to be blank. Per spec
+		// all item elements are optional.
+		if item.Link == "" {
+			log.Printf("Feed: %s: Item has blank link: %s", feed.Name, item.Title)
+			continue
+		}
+
 		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime,
 			ignorePublicationTimes)
 		if err != nil {
@@ -384,9 +427,9 @@ func storeFeedPayload(db *sql.DB, feed *DBFeed, payload []byte) error {
 // If we have at least one item from the feed already, then this time is the
 // most recent item's publication time.
 //
-// If we have no items yet, use the feed's last poll time.
+// If we have no items yet then it's the zero time.
 //
-// See recordFeedItem() for a more in depth explanation of why.
+// See shouldRecordItem() for a more in depth explanation of why.
 func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
 	query := `SELECT MAX(publication_date) FROM rss_item WHERE rss_feed_id = $1`
 
@@ -396,8 +439,8 @@ func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
 			fmt.Errorf("failed to query for newest publication date: %s", err)
 	}
 
-	// Our default is the last poll time if there is no item yet.
-	newestTime := feed.LastUpdateTime
+	// Our default is the zero time if we have no items.
+	var newestTime time.Time
 
 	for rows.Next() {
 		// We get null time if there's no item.
@@ -425,91 +468,33 @@ func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
 // recordFeedItem inserts the feed item into the database.
 //
 // Return whether we actually performed an insert and if there was an error.
-//
-// We store the item if:
-//
-// - The item is not yet in the database
-//
-// - The item's publication date meets our date requirements.
-//
-// The date requirements are: The item's publication date must be on or after
-// the date of the newest item we have from the feed. If we have no items from
-// the feed yet, this date will be the last time we have recorded for polling
-// the feed.
-//
-// The latter is so that when we first add a feed that we do not end up adding
-// many old items. When adding the feed, we say we last polled it at the time
-// of adding it, so we get items starting from that point.
-//
-// My previous choice of timing requirement was problematic. It was to only
-// accept items that were older than the last time we polled the feed. This was
-// problematic because a feed could have been published after we last polled it
-// and contain items prior to us polling it, such as if it collected a batch of
-// items every hour for example, and we happened to poll it halfway through the
-// hour.
-//
-// We skip items based on publication date for a couple reasons:
-//
-// - First, when we first add a feed, we don't want a large number of items to
-//   suddenly appear into people's feed. In some cases this can lead to 50-100
-//   items going back a long time.
-//
-// - Second, occasionally feed items IDs/links change, and this too can lead to
-//   a large number of items appearing needing to be stored, again leading to
-//   polluted feeds. For this we could also restrict based on GUID, but that is
-//   an optional element in an item.
-//
-// Previously I did not take publication date into account, and simply added
-// based on whether the feed's URL was stored yet. This had problems related to
-// when a feed's URLs change, and also when I first added a feed it would mean
-// a large number of items all at once.
 func recordFeedItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 	cutoffTime time.Time, ignorePublicationTimes bool) (bool, error) {
-	// Sanity check the item's information. We require at least a link to be set.
-	// Description may be blank. We also permit title to be blank.
-	if item.Link == "" {
-		return false, fmt.Errorf("item has blank link: %s", item.Title)
-	}
-
-	// If the item is already recorded, then we don't do anything.
-	exists, err := feedItemExists(db, feed, item)
+	record, err := shouldRecordItem(config, db, feed, item, cutoffTime,
+		ignorePublicationTimes)
 	if err != nil {
-		return false, fmt.Errorf("failed to check if feed item title [%s] exists: %s",
-			item.Title, err)
+		return false, fmt.Errorf("unable to decide whether to record item: %s", err)
 	}
 
-	if exists {
-		if config.Quiet == 0 {
-			log.Printf("Skipping recording item from feed [%s] due to having it already: %s",
-				feed.Name, item.Title)
-		}
+	if !record {
 		return false, nil
 	}
-
-	// It looks like we don't have it stored. Decide whether we should store it
-	// based on when it was published.
-
-	if !ignorePublicationTimes && item.PubDate.Before(cutoffTime) {
-		// For now I want to always output that this happened rather than only in
-		// verbose mode. I am wanting to see if there are items that are missed due
-		// to using a hard cutoff. If there are, then we using GUID, if available,
-		// may be one solution.
-		log.Printf(
-			"Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s: %s",
-			feed.Name, item.PubDate, cutoffTime, item.Title, item.Link)
-		return false, nil
-	}
-
-	// We need to record this item.
 
 	query := `
 INSERT INTO rss_item
-(title, description, link, publication_date, rss_feed_id)
-VALUES($1, $2, $3, $4, $5)
+(title, description, link, publication_date, rss_feed_id, guid)
+VALUES($1, $2, $3, $4, $5, $6)
 RETURNING id
 `
-	rows, err := db.Query(query, item.Title, item.Description, item.Link,
-		item.PubDate, feed.ID)
+
+	var guid *string
+	if item.GUID != "" {
+		guid = &item.GUID
+	}
+	params := []interface{}{item.Title, item.Description, item.Link, item.PubDate,
+		feed.ID, guid}
+
+	rows, err := db.Query(query, params...)
 	if err != nil {
 		return false, fmt.Errorf("failed to add item with title [%s]: %s",
 			item.Title, err)
@@ -528,7 +513,10 @@ RETURNING id
 		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
-	if feed.Archive {
+	// On first poll we set all items as read. Otherwise when adding a feed we get
+	// a bunch of items all at once which is not very nice. Also if the feed is
+	// set to archive mode then it goes directly to read state.
+	if !feed.HasBeenPolled || feed.Archive {
 		// We are currently single user.
 		userID := 1
 		if err := gorse.DBSetItemReadState(db, id, userID, gorse.Read); err != nil {
@@ -543,29 +531,101 @@ RETURNING id
 	return true, nil
 }
 
-// feedItemExists checks if this item is already recorded in the database.
+// Decide whether we should record the feed item into the database.
 //
-// It does this by checking if the uri exists for the given feed id.
-func feedItemExists(db *sql.DB, feed *DBFeed,
+// If we've never polled a feed yet then we always need to record it.
+//
+// If the item has a GUID (an optional element that I don't require), rely on
+// it alone to decide whether to include the item. If there's an item with the
+// GUID then it's recorded, otherwise it needs to be recorded.
+//
+// I choose to place trust in the GUID as I encountered a case where a feed
+// added items prior to the date requirements described below. This meant the
+// item was not recorded but should have been. If a feed uses GUIDs correctly
+// my thinking is that they avoid the issues around link changes (where a feed
+// may mass update links such as because of a domain/protocol change). This is
+// probably optimistic, but I'm trying it!
+//
+// If the item has no GUID then we decide by the item's link and publication
+// date.
+//
+// Check whether we have an item with this link already. It is optional for an
+// element to have a link, but it's something I require. If we have an item
+// with the link, then it's already recorded. If we don't, then decide by the
+// item's publication date.
+//
+// The item's publication date must be on or after the cut off time. The cut
+// off time is the publication date of the newest item we have from the feed.
+//
+// We skip items based on publication date because occasionally feeds mass
+// update their links. If we go by link alone then we end up recording items
+// that were already recorded. Consider the case where a feed switches to https
+// links.
+//
+// In the past I also relied on the cut off time to avoid adding lots of items
+// when first adding a feed. Instead on first poll I now record all items but
+// flag them as read, so the cut off time isn't necessary for this case.
+func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
+	cutoffTime time.Time, ignorePublicationTimes bool) (bool, error) {
+	if !feed.HasBeenPolled {
+		return true, nil
+	}
+
+	// If the item has a GUID then rely on it. Don't bother checking anything
+	// else.
+	if item.GUID != "" {
+		exists, err := feedItemExistsByGUID(db, feed, item)
+		if err != nil {
+			return false, fmt.Errorf("failed to check if item exists by guid: %s",
+				err)
+		}
+
+		if exists {
+			return false, nil
+		}
+
+		return true, nil
+	}
+
+	exists, err := feedItemExistsByLink(db, feed, item)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if item exists by link: %s", err)
+	}
+
+	if exists {
+		return false, nil
+	}
+
+	// It looks like we don't have it stored. Decide whether we should store it
+	// based on when it was published.
+
+	if ignorePublicationTimes {
+		return true, nil
+	}
+
+	if item.PubDate.Before(cutoffTime) {
+		// I want to always log that this happened, not only in verbose mode. I want
+		// to see if there are items that are missed due to using a hard cutoff as
+		// I may need to reconsider it if so.
+		log.Printf(
+			"Skipping recording item from feed [%s] due to its publication time (%s, cutoff time is %s): %s: %s",
+			feed.Name, item.PubDate, cutoffTime, item.Title, item.Link)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// feedItemExistsByGUID checks if there is an item in the database for this feed
+// with its GUID.
+func feedItemExistsByGUID(db *sql.DB, feed *DBFeed,
 	item *rss.Item) (bool, error) {
 	// Check main table.
-	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
-	rows, err := db.Query(query, feed.ID, item.Link)
+
+	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND guid = $2`
+	count, err := countRowsProduced(db, query, feed.ID, item.GUID)
 	if err != nil {
-		return false,
-			fmt.Errorf("failed to check if item title [%s] exists for feed [%s]: %s",
-				item.Title, feed.Name, err)
-	}
-
-	// If we have a row, then the item exists.
-
-	count := 0
-	for rows.Next() {
-		count++
-	}
-
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("failure fetching rows: %s", err)
+		return false, fmt.Errorf("unable to query rss_item: %s", err)
 	}
 
 	if count > 0 {
@@ -573,29 +633,61 @@ func feedItemExists(db *sql.DB, feed *DBFeed,
 	}
 
 	// Check archive table.
-	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND link = $2`
-	rows, err = db.Query(query, feed.ID, item.Link)
+
+	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND guid = $2`
+	count, err = countRowsProduced(db, query, feed.ID, item.GUID)
 	if err != nil {
-		return false, fmt.Errorf("failed to check if item title [%s] exists for feed [%s]: %s",
-			item.Title, feed.Name, err)
+		return false, fmt.Errorf("unable to query rss_item_archive: %s", err)
 	}
 
-	// If we have a row, then the item exists.
+	return count > 0, nil
+}
 
-	count = 0
-	for rows.Next() {
-		count++
-	}
+// feedItemExistsByLink checks if there is an item in the database for this feed
+// with its URL.
+func feedItemExistsByLink(db *sql.DB, feed *DBFeed,
+	item *rss.Item) (bool, error) {
+	// Check main table.
 
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("failure fetching rows: %s", err)
+	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND link = $2`
+	count, err := countRowsProduced(db, query, feed.ID, item.Link)
+	if err != nil {
+		return false, fmt.Errorf("unable to query rss_item: %s", err)
 	}
 
 	if count > 0 {
 		return true, nil
 	}
 
-	return false, nil
+	// Check archive table.
+
+	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND link = $2`
+	count, err = countRowsProduced(db, query, feed.ID, item.Link)
+	if err != nil {
+		return false, fmt.Errorf("unable to query rss_item_archive: %s", err)
+	}
+
+	return count > 0, nil
+}
+
+// Execute a query and count how many rows returned.
+func countRowsProduced(db *sql.DB, query string,
+	params ...interface{}) (int, error) {
+	rows, err := db.Query(query, params...)
+	if err != nil {
+		return -1, fmt.Errorf("query failed: %s", err)
+	}
+
+	count := 0
+	for rows.Next() {
+		count++
+	}
+
+	if err := rows.Err(); err != nil {
+		return -1, fmt.Errorf("failure fetching rows: %s", err)
+	}
+
+	return count, nil
 }
 
 // recordFeedUpdate sets the last feed update time.
