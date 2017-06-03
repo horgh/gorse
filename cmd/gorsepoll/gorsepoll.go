@@ -54,7 +54,7 @@ type DBFeed struct {
 	UpdateFrequencySeconds int64
 
 	// Last time we updated.
-	LastUpdateTime time.Time
+	LastUpdateTime *time.Time
 
 	// Whether the feed is set to archive mode. Archive mode means that new items
 	// get recorded but set to read automatically. I find this useful for feeds I
@@ -63,9 +63,6 @@ type DBFeed struct {
 	// interface, but if I fall behind on that web interface and can't go back far
 	// enough, then I might need to look at it through Gorse.
 	Archive bool
-
-	// Has the feed ever been polled?
-	HasBeenPolled bool
 }
 
 func main() {
@@ -158,21 +155,17 @@ ORDER BY name
 
 	for rows.Next() {
 		feed := DBFeed{}
+		var nt pq.NullTime
 
 		if err := rows.Scan(&feed.ID, &feed.Name, &feed.URI,
-			&feed.UpdateFrequencySeconds, &feed.LastUpdateTime,
-			&feed.Archive); err != nil {
+			&feed.UpdateFrequencySeconds, &nt, &feed.Archive); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("failed to scan row: %s", err)
 		}
 
-		polled, err := hasFeedBeenPolled(db, feed.ID)
-		if err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("unable to check if feed has been polled: %s", err)
+		if nt.Valid {
+			feed.LastUpdateTime = &nt.Time
 		}
-
-		feed.HasBeenPolled = polled
 
 		feeds = append(feeds, feed)
 	}
@@ -182,30 +175,6 @@ ORDER BY name
 	}
 
 	return feeds, nil
-}
-
-// Decide whether we've polled a feed before.
-//
-// Rather than have any explicit flag for this I go by whether we have any items
-// recorded for it.
-func hasFeedBeenPolled(db *sql.DB, id int64) (bool, error) {
-	query := `SELECT 1 FROM rss_item WHERE rss_feed_id = $1 LIMIT 1`
-	count, err := countRowsProduced(db, query, id)
-	if err != nil {
-		return false, fmt.Errorf("unable to query rss_item: %s", err)
-	}
-
-	if count > 0 {
-		return true, nil
-	}
-
-	query = `SELECT 1 FROM rss_item_archive WHERE rss_feed_id = $1 LIMIT 1`
-	count, err = countRowsProduced(db, query, id)
-	if err != nil {
-		return false, fmt.Errorf("unable to query rss_item: %s", err)
-	}
-
-	return count > 0, nil
 }
 
 // processFeeds processes each feed in turn.
@@ -222,25 +191,9 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 	feedsUpdated := 0
 
 	for _, feed := range feeds {
-		// Check if we need to update. We may be always forcing an update. If not,
-		// we decide based on when we last updated the feed.
-		if !ignorePollTimes {
-			timeSince := time.Since(feed.LastUpdateTime)
-
-			if config.Quiet == 0 {
-				log.Printf("Feed [%s] was updated [%d] second(s) ago, and stored update frequency is %d second(s).",
-					feed.Name, int64(timeSince.Seconds()), feed.UpdateFrequencySeconds)
-			}
-
-			if int64(timeSince.Seconds()) < feed.UpdateFrequencySeconds {
-				if config.Quiet == 0 {
-					log.Print("Skipping update.")
-				}
-				continue
-			}
+		if !shouldUpdateFeed(config, &feed, ignorePollTimes) {
+			continue
 		}
-
-		// Perform our update.
 
 		if config.Quiet == 0 {
 			log.Printf("Updating feed [%s]", feed.Name)
@@ -277,6 +230,28 @@ func processFeeds(config *Config, db *sql.DB, feeds []DBFeed,
 	}
 
 	return nil
+}
+
+// Check if we need to update. We may be always forcing an update. If not, we
+// decide based on when we last updated the feed.
+func shouldUpdateFeed(config *Config, feed *DBFeed, ignorePollTimes bool) bool {
+	// Poll no matter what.
+	if ignorePollTimes {
+		return true
+	}
+
+	// Never updated.
+	if feed.LastUpdateTime == nil {
+		return true
+	}
+
+	timeSince := time.Since(*feed.LastUpdateTime)
+
+	if int64(timeSince.Seconds()) < feed.UpdateFrequencySeconds {
+		return false
+	}
+
+	return true
 }
 
 // updateFeed fetches, parses, and stores the new items in a feed.
@@ -431,9 +406,19 @@ func storeFeedPayload(db *sql.DB, feed *DBFeed, payload []byte) error {
 //
 // See shouldRecordItem() for a more in depth explanation of why.
 func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
-	query := `SELECT MAX(publication_date) FROM rss_item WHERE rss_feed_id = $1`
+	query := `
+		SELECT MAX(t) FROM (
+			SELECT MAX(publication_date) AS t
+			FROM rss_item WHERE rss_feed_id = $1
 
-	rows, err := db.Query(query, feed.ID)
+			UNION
+
+			SELECT MAX(publication_date) AS t
+			FROM rss_item_archive WHERE rss_feed_id = $2
+		) u
+`
+
+	rows, err := db.Query(query, feed.ID, feed.ID)
 	if err != nil {
 		return time.Time{},
 			fmt.Errorf("failed to query for newest publication date: %s", err)
@@ -513,10 +498,11 @@ RETURNING id
 		return false, fmt.Errorf("failure fetching rows: %s", err)
 	}
 
-	// On first poll we set all items as read. Otherwise when adding a feed we get
-	// a bunch of items all at once which is not very nice. Also if the feed is
-	// set to archive mode then it goes directly to read state.
-	if !feed.HasBeenPolled || feed.Archive {
+	// On first poll we set all items polled as read. Otherwise when adding a feed
+	// we get a bunch of old items all at once which is not very nice.
+	//
+	// Also if the feed is set to archive mode then it goes directly to read.
+	if feed.LastUpdateTime == nil || feed.Archive {
 		// We are currently single user.
 		userID := 1
 		if err := gorse.DBSetItemReadState(db, id, userID, gorse.Read); err != nil {
@@ -567,7 +553,9 @@ RETURNING id
 // flag them as read, so the cut off time isn't necessary for this case.
 func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 	cutoffTime time.Time, ignorePublicationTimes bool) (bool, error) {
-	if !feed.HasBeenPolled {
+	// Never polled the feed yet? By definition then we need to record all its
+	// items.
+	if feed.LastUpdateTime == nil {
 		return true, nil
 	}
 
@@ -583,6 +571,11 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		if exists {
 			return false, nil
 		}
+
+		// It's possible the item's link is in the database. There is a unique
+		// constraint on links. One way this can happen is we have not always
+		// tracked GUID, so items prior to doing so will appear to not be present
+		// but may be.
 
 		return true, nil
 	}
