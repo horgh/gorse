@@ -291,18 +291,14 @@ func updateFeed(config *Config, db *sql.DB, feed *DBFeed,
 		log.Printf("Feed [%s] cutoff time: %s", feed.Name, cutoffTime)
 	}
 
+	if err := sanityCheckFeed(channel.Items); err != nil {
+		return fmt.Errorf("sanity checks failed for feed %s: %s", feed.Name, err)
+	}
+
 	// Record each item in the feed.
 
 	recordedCount := 0
 	for _, item := range channel.Items {
-		// Sanity check the item's information. We require at least a link to be
-		// set. Description may be blank. We also permit title to be blank. Per spec
-		// all item elements are optional.
-		if item.Link == "" {
-			log.Printf("Feed: %s: Item has blank link: %s", feed.Name, item.Title)
-			continue
-		}
-
 		recorded, err := recordFeedItem(config, db, feed, &item, cutoffTime,
 			ignorePublicationTimes)
 		if err != nil {
@@ -438,6 +434,39 @@ func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
 	}
 
 	return newestTime, nil
+}
+
+// Run some checks on a feed.
+//
+// I require some fields (link, even though it's optional). Check this.
+//
+// I also assume GUID and Link fields are unique in a feed. Check this.
+func sanityCheckFeed(items []rss.Item) error {
+	links := map[string]struct{}{}
+	guids := map[string]struct{}{}
+
+	for _, item := range items {
+		// Sanity check the item's information. We require at least a link to be
+		// set. Description may be blank. We also permit title to be blank. Per spec
+		// all item elements are optional.
+		if item.Link == "" {
+			return fmt.Errorf("item has blank link: %s", item.Title)
+		}
+
+		if _, exists := links[item.Link]; exists {
+			return fmt.Errorf("feed has two items with the same link: %s", item.Link)
+		}
+
+		links[item.Link] = struct{}{}
+
+		if _, exists := guids[item.GUID]; exists {
+			return fmt.Errorf("feed has two items with the same GUID: %s", item.GUID)
+		}
+
+		guids[item.GUID] = struct{}{}
+	}
+
+	return nil
 }
 
 // recordFeedItem inserts the feed item into the database.
