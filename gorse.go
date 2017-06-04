@@ -5,6 +5,7 @@ package gorse
 import (
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 // ReadState holds an item's state (rss_item_state table, read_state type).
@@ -19,7 +20,21 @@ const (
 	ReadLater
 )
 
-// DBSetItemReadState sets the given item's state in the database.
+// DBItem represents an item in the database.
+type DBItem struct {
+	ID              int64
+	Title           string
+	Description     string
+	Link            string
+	RSSFeedID       int64
+	PublicationDate time.Time
+	GUID            *string
+}
+
+// ErrItemNotFound means the item was not found in the database.
+var ErrItemNotFound = fmt.Errorf("item not found")
+
+// DBSetItemReadState sets the item's read state for the user.
 func DBSetItemReadState(db *sql.DB, id int64, userID int,
 	state ReadState) error {
 	// Upsert.
@@ -47,4 +62,43 @@ func (s ReadState) String() string {
 		return "read"
 	}
 	return "read-later"
+}
+
+// FindItemByLink retrieves an item's information from the database by feed and
+// link. Link is unique per feed.
+func FindItemByLink(db *sql.DB, feedID int64, link string) (*DBItem, error) {
+	query := `
+SELECT
+id, title, description, link, rss_feed_id, publication_date, guid
+FROM rss_item
+WHERE rss_feed_id = $1 AND
+link = $2
+`
+
+	rows, err := db.Query(query, feedID, link)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		item := &DBItem{}
+
+		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
+			&item.RSSFeedID, &item.PublicationDate, &item.GUID); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("failed to scan row: %s", err)
+		}
+
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("error closing rows: %s", err)
+		}
+
+		return item, nil
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failure fetching rows: %s", err)
+	}
+
+	return nil, ErrItemNotFound
 }

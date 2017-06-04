@@ -5,22 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/horgh/gorse"
 )
 
 // DBItem holds the information about an input/entry that is in the database.
+// TODO(will@summercat.com): Refactor to combine with gorse.DBItem. I think we
+// should have one that is the generic item. This one includes a field related
+// to a single user.
 type DBItem struct {
-	// Database ID.
-	ID          int64
-	Title       string
-	Description string
-	Link        string
-	// Feed database ID.
-	FeedID          int64
-	PublicationDate time.Time
-	GUID            string
+	gorse.DBItem
 
 	// Name from the rss_feed table.
 	FeedName string
@@ -204,15 +198,17 @@ COALESCE(ris.user_id, $2) = $3
 	for rows.Next() {
 		item := DBItem{}
 
-		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
+		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
 			&item.PublicationDate, &item.GUID, &item.FeedID, &item.FeedName,
-			&item.ReadState)
-		if err != nil {
+			&item.ReadState); err != nil {
 			_ = rows.Close()
 			return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
 		}
 
-		_ = rows.Close()
+		if err := rows.Close(); err != nil {
+			return DBItem{}, fmt.Errorf("error closing rows: %s", err)
+		}
+
 		return item, nil
 	}
 

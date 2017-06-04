@@ -573,9 +573,16 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		}
 
 		// It's possible the item's link is in the database. There is a unique
-		// constraint on links. One way this can happen is we have not always
-		// tracked GUID, so items prior to doing so will appear to not be present
-		// but may be.
+		// constraint on links. We've not always tracked GUID, so items prior to
+		// doing so will appear to not be present but may be. Deal with this.
+		found, err := fixOldItem(db, feed, item)
+		if err != nil {
+			return false, fmt.Errorf("failed to fix old item: %s", err)
+		}
+
+		if found {
+			return false, nil
+		}
 
 		return true, nil
 	}
@@ -661,6 +668,60 @@ func feedItemExistsByLink(db *sql.DB, feed *DBFeed,
 	}
 
 	return count > 0, nil
+}
+
+// We want to record the item in the database since we've found its GUID is not
+// present.
+//
+// However, since we've not always tracked GUIDs, it's possible the item is
+// there and we just don't have its GUID.
+//
+// Look up the item by link (it's a database constraint that the link be to a
+// feed unique).
+//
+// Return whether we found an item to update. This information is only useful if
+// there was no error.
+func fixOldItem(db *sql.DB, feed *DBFeed, item *rss.Item) (bool, error) {
+	dbItem, err := gorse.FindItemByLink(db, feed.ID, item.Link)
+	if err != nil {
+		// If it's not present with this link then there's nothing to fix.
+		if err == gorse.ErrItemNotFound {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("error looking up item by link: %s", err)
+	}
+
+	// It's in the database. We need to know whether it's missing a GUID or if it
+	// has one different than expected. If it's just missing a GUID then we can
+	// set one. If it has one that's different then that is surprising. Report
+	// it.
+
+	if dbItem.GUID == nil {
+		if err := dbSetItemGUID(db, dbItem.ID, item.GUID); err != nil {
+			return false, fmt.Errorf("unable to set GUID: %s", err)
+		}
+
+		return true, nil
+	}
+
+	// This should not happen. We should only call this function when we've found
+	// no item with the GUID.
+	if *dbItem.GUID == item.GUID {
+		return false, fmt.Errorf("item found by GUID, but this shouldn't happen")
+	}
+
+	return false, fmt.Errorf("mismatching GUID for item")
+}
+
+func dbSetItemGUID(db *sql.DB, id int64, guid string) error {
+	query := `UPDATE rss_item SET guid = $1 WHERE id = $2`
+
+	if _, err := db.Exec(query, guid, id); err != nil {
+		return fmt.Errorf("failed to set guid: %s", err)
+	}
+
+	return nil
 }
 
 // Execute a query and count how many rows returned.
