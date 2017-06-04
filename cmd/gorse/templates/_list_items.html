@@ -30,13 +30,14 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 		{{range $index, $element := .Items}}
 			{{$rowClass := getRowCSSClass $index}}
 			<li class="{{$rowClass}}">
-				<h1>
+				<h2>
+					<a href="#" class="check">✓</a>
 					{{.FeedName}}
 					<a href="{{.Link}}">{{if len .Title}}{{.Title}}{{else}}No title{{end}}</a>
 					<span class="date">
 						({{.PublicationDate}})
 					</span>
-				</h1>
+				</h2>
 
 				<p>{{.Description}}</p>
 

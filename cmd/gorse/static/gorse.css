@@ -105,15 +105,15 @@ a:active h1 {
 #items .archive {
 	background-color: #ffcc33;
 }
-#items li h1 {
+#items li h2 {
 	font-size: medium;
 	margin: 0;
 	padding: 0;
 }
-#items li h1 a {
+#items li h2 a {
 	font-weight: normal;
 }
-#items li h1 .date {
+#items li h2 .date {
 	font-size: small;
 	font-weight: normal;
 }
