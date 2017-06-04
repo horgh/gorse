@@ -31,7 +31,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 			{{$rowClass := getRowCSSClass $index}}
 			<li class="{{$rowClass}}">
 				<h2>
-					<a href="#" class="check">✓</a>
+					<a href="#item-checked">✓</a>
 					{{.FeedName}}
 					<a href="{{.Link}}">{{if len .Title}}{{.Title}}{{else}}No title{{end}}</a>
 					<span class="date">
