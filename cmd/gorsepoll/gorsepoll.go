@@ -406,19 +406,9 @@ func storeFeedPayload(db *sql.DB, feed *DBFeed, payload []byte) error {
 //
 // See shouldRecordItem() for a more in depth explanation of why.
 func getFeedCutoffTime(db *sql.DB, feed *DBFeed) (time.Time, error) {
-	query := `
-		SELECT MAX(t) FROM (
-			SELECT MAX(publication_date) AS t
-			FROM rss_item WHERE rss_feed_id = $1
+	query := `SELECT MAX(publication_date) FROM rss_item WHERE rss_feed_id = $1`
 
-			UNION
-
-			SELECT MAX(publication_date) AS t
-			FROM rss_item_archive WHERE rss_feed_id = $2
-		) u
-`
-
-	rows, err := db.Query(query, feed.ID, feed.ID)
+	rows, err := db.Query(query, feed.ID)
 	if err != nil {
 		return time.Time{},
 			fmt.Errorf("failed to query for newest publication date: %s", err)
@@ -521,46 +511,26 @@ RETURNING id
 //
 // If we've never polled a feed yet then we always need to record it.
 //
-// If the item has a GUID (an optional element that I don't require), rely on
-// it alone to decide whether to include the item. If there's an item with the
-// GUID then it's recorded, otherwise it needs to be recorded.
+// Check whether we have it recorded. Look up both by GUID and by link. If it's
+// present either way then say we have it already.
 //
-// I choose to place trust in the GUID as I encountered a case where a feed
-// added items prior to the date requirements described below. This meant the
-// item was not recorded but should have been. If a feed uses GUIDs correctly
-// my thinking is that they avoid the issues around link changes (where a feed
-// may mass update links such as because of a domain/protocol change). This is
-// probably optimistic, but I'm trying it!
+// If we don't have it and if it has a GUID, record it. Trust the GUID.
 //
-// If the item has no GUID then we decide by the item's link and publication
-// date.
-//
-// Check whether we have an item with this link already. It is optional for an
-// element to have a link, but it's something I require. If we have an item
-// with the link, then it's already recorded. If we don't, then decide by the
-// item's publication date.
+// If there's no GUID then decide using the publication date.
 //
 // The item's publication date must be on or after the cut off time. The cut
 // off time is the publication date of the newest item we have from the feed.
 //
 // We skip items based on publication date because occasionally feeds mass
-// update their links. If we go by link alone then we end up recording items
-// that were already recorded. Consider the case where a feed switches to https
-// links.
-//
-// In the past I also relied on the cut off time to avoid adding lots of items
-// when first adding a feed. Instead on first poll I now record all items but
-// flag them as read, so the cut off time isn't necessary for this case.
+// update their links. There is a risk of mass adding items due to that.
 func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 	cutoffTime time.Time, ignorePublicationTimes bool) (bool, error) {
-	// Never polled the feed yet? By definition then we need to record all its
-	// items.
+	// Have we never polled the feed yet? By definition then we need to record all
+	// its items.
 	if feed.LastUpdateTime == nil {
 		return true, nil
 	}
 
-	// If the item has a GUID then rely on it. Don't bother checking anything
-	// else.
 	if item.GUID != "" {
 		exists, err := feedItemExistsByGUID(db, feed, item)
 		if err != nil {
@@ -571,8 +541,6 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		if exists {
 			return false, nil
 		}
-
-		return true, nil
 	}
 
 	exists, err := feedItemExistsByLink(db, feed, item)
@@ -584,8 +552,14 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		return false, nil
 	}
 
-	// It looks like we don't have it stored. Decide whether we should store it
-	// based on when it was published.
+	// It looks like we don't have it stored. Potentially store it.
+
+	// If it has a GUID then rely on it over publication date.
+	if item.GUID != "" {
+		return true, nil
+	}
+
+	// Decide based on its publication date.
 
 	if ignorePublicationTimes {
 		return true, nil
@@ -608,24 +582,10 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 // with its GUID.
 func feedItemExistsByGUID(db *sql.DB, feed *DBFeed,
 	item *rss.Item) (bool, error) {
-	// Check main table.
-
 	query := `SELECT id FROM rss_item WHERE rss_feed_id = $1 AND guid = $2`
 	count, err := countRowsProduced(db, query, feed.ID, item.GUID)
 	if err != nil {
 		return false, fmt.Errorf("unable to query rss_item: %s", err)
-	}
-
-	if count > 0 {
-		return true, nil
-	}
-
-	// Check archive table.
-
-	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND guid = $2`
-	count, err = countRowsProduced(db, query, feed.ID, item.GUID)
-	if err != nil {
-		return false, fmt.Errorf("unable to query rss_item_archive: %s", err)
 	}
 
 	return count > 0, nil
@@ -641,18 +601,6 @@ func feedItemExistsByLink(db *sql.DB, feed *DBFeed,
 	count, err := countRowsProduced(db, query, feed.ID, item.Link)
 	if err != nil {
 		return false, fmt.Errorf("unable to query rss_item: %s", err)
-	}
-
-	if count > 0 {
-		return true, nil
-	}
-
-	// Check archive table.
-
-	query = `SELECT id FROM rss_item_archive WHERE rss_feed_id = $1 AND link = $2`
-	count, err = countRowsProduced(db, query, feed.ID, item.Link)
-	if err != nil {
-		return false, fmt.Errorf("unable to query rss_item_archive: %s", err)
 	}
 
 	return count > 0, nil
