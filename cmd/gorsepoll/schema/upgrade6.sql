@@ -8,4 +8,7 @@
 ALTER TABLE rss_item ADD COLUMN guid VARCHAR;
 ALTER TABLE rss_item_archive ADD COLUMN guid VARCHAR;
 
+CREATE UNIQUE INDEX ON rss_item (rss_feed_id, guid);
+CREATE UNIQUE INDEX ON rss_item_archive (rss_feed_id, guid);
+
 ALTER TABLE rss_feed ALTER COLUMN last_update_time DROP NOT NULL;
