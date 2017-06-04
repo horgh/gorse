@@ -459,6 +459,10 @@ func sanityCheckFeed(items []rss.Item) error {
 
 		links[item.Link] = struct{}{}
 
+		if item.GUID == "" {
+			continue
+		}
+
 		if _, exists := guids[item.GUID]; exists {
 			return fmt.Errorf("feed has two items with the same GUID: %s", item.GUID)
 		}
