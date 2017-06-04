@@ -564,6 +564,15 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		return true, nil
 	}
 
+	exists, err := feedItemExistsByLink(db, feed, item)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if item exists by link: %s", err)
+	}
+
+	if exists {
+		return false, nil
+	}
+
 	if item.GUID != "" {
 		exists, err := feedItemExistsByGUID(db, feed, item)
 		if err != nil {
@@ -572,17 +581,10 @@ func shouldRecordItem(config *Config, db *sql.DB, feed *DBFeed, item *rss.Item,
 		}
 
 		if exists {
+			log.Printf("Item exists by GUID but not by link: %s: %s", feed.Name,
+				item.Title)
 			return false, nil
 		}
-	}
-
-	exists, err := feedItemExistsByLink(db, feed, item)
-	if err != nil {
-		return false, fmt.Errorf("failed to check if item exists by link: %s", err)
-	}
-
-	if exists {
-		return false, nil
 	}
 
 	// It looks like we don't have it stored. Potentially store it.
