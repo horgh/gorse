@@ -560,8 +560,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 				return
 			}
 
-			// Record it to the "read after archive" table if it was archived and now
-			// is being flagged read.
+			// Record it to the "read after archive" table if it was saved to read
+			// later and now is being flagged read.
 
 			item, err := dbGetItem(db, id, userID)
 			if err != nil {
@@ -571,9 +571,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 			}
 
 			if item.ReadState == "read-later" {
-				err := dbRecordReadAfterArchive(db, userID, item)
-				if err != nil {
-					log.Printf("Unable to record item read after archive: %d: %s", id, err)
+				if err := dbRecordReadAfterReadLater(db, userID, item); err != nil {
+					log.Printf("Unable to record read-later item read: %d: %s", id, err)
 					send500Error(rw, "Unable to read read after archive.")
 					return
 				}
@@ -597,7 +596,7 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		log.Printf("Set %d items read.", readCount)
 	}
 
-	// Set some archived.
+	// Set some to read later.
 
 	archiveItems, exists := request.PostForm["archive-item"]
 	archivedCount := 0

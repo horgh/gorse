@@ -199,7 +199,7 @@ COALESCE(ris.user_id, $2) = $3
 		item := DBItem{}
 
 		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
-			&item.PublicationDate, &item.GUID, &item.FeedID, &item.FeedName,
+			&item.PublicationDate, &item.GUID, &item.RSSFeedID, &item.FeedName,
 			&item.ReadState); err != nil {
 			_ = rows.Close()
 			return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
@@ -219,21 +219,19 @@ COALESCE(ris.user_id, $2) = $3
 	return DBItem{}, fmt.Errorf("item not found")
 }
 
-// Record the item was read after having been archived.
+// Record the item was read after having been saved to read later.
 //
 // It is useful to be able to refer back to such items as it is likely they were
 // looked at more closely than others.
-func dbRecordReadAfterArchive(db *sql.DB, userID int, item DBItem) error {
+func dbRecordReadAfterReadLater(db *sql.DB, userID int, item DBItem) error {
 	query := `
 INSERT INTO rss_item_read_after_archive
 (user_id, rss_feed_id, rss_item_id)
 VALUES($1, $2, $3)
 `
-	_, err := db.Exec(query, userID, item.FeedID, item.ID)
-	if err != nil {
+	if _, err := db.Exec(query, userID, item.RSSFeedID, item.ID); err != nil {
 		return fmt.Errorf("unable to insert: %s", err)
 	}
 
-	log.Printf("Recorded item id %d as read after archive.", item.ID)
 	return nil
 }
