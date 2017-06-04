@@ -146,12 +146,12 @@ func TestShouldRecordItem3(t *testing.T) {
 
 	rows0 := sqlmock.NewRows([]string{"id"})
 	mock.ExpectQuery(
-		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND guid = \$2`).
+		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND link = \$2`).
 		WillReturnRows(rows0)
 
 	rows1 := sqlmock.NewRows([]string{"id"})
 	mock.ExpectQuery(
-		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND link = \$2`).
+		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND guid = \$2`).
 		WillReturnRows(rows1)
 
 	mock.ExpectClose()
@@ -192,10 +192,15 @@ func TestShouldRecordItem4(t *testing.T) {
 	}()
 
 	rows0 := sqlmock.NewRows([]string{"id"})
-	rows0.AddRow(1)
+	mock.ExpectQuery(
+		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND link = \$2`).
+		WillReturnRows(rows0)
+
+	rows1 := sqlmock.NewRows([]string{"id"})
+	rows1.AddRow(1)
 	mock.ExpectQuery(
 		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND guid = \$2`).
-		WillReturnRows(rows0)
+		WillReturnRows(rows1)
 
 	mock.ExpectClose()
 
@@ -235,15 +240,10 @@ func TestShouldRecordItem5(t *testing.T) {
 	}()
 
 	rows0 := sqlmock.NewRows([]string{"id"})
-	mock.ExpectQuery(
-		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND guid = \$2`).
-		WillReturnRows(rows0)
-
-	rows1 := sqlmock.NewRows([]string{"id"})
-	rows1.AddRow(1)
+	rows0.AddRow(1)
 	mock.ExpectQuery(
 		`SELECT id FROM rss_item WHERE rss_feed_id = \$1 AND link = \$2`).
-		WillReturnRows(rows1)
+		WillReturnRows(rows0)
 
 	mock.ExpectClose()
 
