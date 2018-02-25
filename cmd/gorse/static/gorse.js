@@ -67,7 +67,7 @@ Gorse.update_counts = function() {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-	// Add a click handler to all feed item rows.
+	// Add a click handler to all item rows.
 
 	var items = document.querySelectorAll("#items > li");
 
