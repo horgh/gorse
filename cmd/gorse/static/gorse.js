@@ -54,18 +54,6 @@ Gorse.toggle_read_state = function(item_li) {
 	item_li.appendChild(state_change);
 };
 
-// Determine how many items we have selected. Update a displayed counter.
-Gorse.update_counts = function() {
-	// Count how many we have selected.
-	var count = document.querySelectorAll('.state-change').length;
-
-	// Display the counter in the save button.
-	var label = 'Save (' + count + ')';
-
-	var save_button = document.getElementById('update-flags-top');
-	save_button.textContent = label;
-};
-
 document.addEventListener('DOMContentLoaded', function() {
 	// Add a click handler to all item rows.
 
@@ -77,7 +65,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		(function(li) {
 			li.addEventListener('click', function() {
 				Gorse.toggle_read_state(li);
-				Gorse.update_counts();
 			})
 		})(li);
 	}
