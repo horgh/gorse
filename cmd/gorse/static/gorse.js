@@ -4,12 +4,6 @@ if (Gorse === undefined) {
 	var Gorse = {};
 }
 
-//! write a message to the console
-/*!
- * @param string msg
- *
- * @return void
- */
 Gorse.log = function(msg) {
 	if (!window || !window.console || !window.console.log ||
 			msg === undefined) {
