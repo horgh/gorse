@@ -46,6 +46,7 @@ a:active h1 {
 	margin: 0;
 	padding: 0;
 	list-style: none inside none;
+	overflow: hidden;
 }
 @media (min-width: 1024px) {
 	#items {
