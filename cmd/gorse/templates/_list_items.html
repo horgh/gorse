@@ -41,11 +41,11 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 
 				<p>{{.Description}}</p>
 
-				<input type="hidden"
-					class="item_id"
-					name="item_id"
-					value="{{.ID}}"
-					>
+				<!-- Not submitted until enabled. -->
+				<input type="hidden" name="read-item" class="read-item"
+					value="{{.ID}}" disabled>
+				<input type="hidden" name="archive-item" class="archive-item"
+					value="{{.ID}}" disabled>
 			</li>
 		{{else}}
 				No unread items found.

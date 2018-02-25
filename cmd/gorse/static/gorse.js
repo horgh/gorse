@@ -15,43 +15,66 @@ Gorse.log = function(msg) {
 // Toggle between 3 states:
 // - none, read, archive
 Gorse.toggle_read_state = function(item_li) {
-	// Read -> archive.
-	if (item_li.classList.contains('read')) {
-		item_li.classList.remove('read');
-		item_li.classList.add('archive');
-
-		var state_change = item_li.querySelector('.state-change');
-		state_change.setAttribute('name', 'archive-item');
-
+	if (Gorse.is_read(item_li)) {
+		Gorse.set_archive(item_li);
 		return;
 	}
 
-	// Archive -> none.
-	if (item_li.classList.contains('archive')) {
+	if (Gorse.is_archive(item_li)) {
+		Gorse.set_none(item_li);
+		return;
+	}
+
+	Gorse.set_read(item_li);
+};
+
+Gorse.is_read = function(item_li) {
+	var input = item_li.querySelector('.read-item');
+	return input.disabled === false;
+};
+
+Gorse.is_archive = function(item_li) {
+	var input = item_li.querySelector('.archive-item');
+	return input.disabled === false;
+};
+
+Gorse.set_read = function(item_li) {
+	{
+		var input = item_li.querySelector('.read-item');
+		input.disabled = false;
+		item_li.classList.add('read');
+	}
+	{
+		var input = item_li.querySelector('.archive-item');
+		input.disabled = true;
 		item_li.classList.remove('archive');
-
-		var state_change = item_li.querySelector('.state-change');
-		state_change.remove();
-
-		return;
 	}
+};
 
-	// None -> read
+Gorse.set_archive = function(item_li) {
+	{
+		var input = item_li.querySelector('.read-item');
+		input.disabled = true;
+		item_li.classList.remove('read');
+	}
+	{
+		var input = item_li.querySelector('.archive-item');
+		input.disabled = false;
+		item_li.classList.add('archive');
+	}
+};
 
-	item_li.classList.add('read');
-
-
-	var state_change = document.createElement('input');
-
-	state_change.setAttribute('type', 'hidden');
-	state_change.setAttribute('name', 'read-item');
-
-	state_change.classList.add('state-change');
-
-	var id_ele = item_li.querySelector('.item_id');
-	state_change.value = id_ele.value
-
-	item_li.appendChild(state_change);
+Gorse.set_none = function(item_li) {
+	{
+		var input = item_li.querySelector('.read-item');
+		input.disabled = true;
+		item_li.classList.remove('read');
+	}
+	{
+		var input = item_li.querySelector('.archive-item');
+		input.disabled = true;
+		item_li.classList.remove('archive');
+	}
 };
 
 document.addEventListener('DOMContentLoaded', function() {
