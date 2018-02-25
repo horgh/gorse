@@ -89,6 +89,13 @@ a:active h1 {
 	padding: 0;
 	list-style: none inside none;
 }
+@media (min-width: 1024px) {
+	#items {
+		max-width: 800px;
+		margin: 0 auto 0 auto;
+	}
+}
+
 #items li {
 	margin: 0;
 	padding: 10px 5px 10px 5px;
