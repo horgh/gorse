@@ -101,4 +101,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		items_form.submit();
 	});
+
+	// Provide a button to mark everything read. This reduces having to do that
+	// manually which is often what we want to do when scrolling through new
+	// items.
+
+	var mark_all_read_button = document.getElementById('mark-all-read');
+	mark_all_read_button.addEventListener('click', function(evt) {
+		evt.preventDefault();
+		for (var i = 0; i < items.length; i++) {
+			var li = items.item(i);
+			if (Gorse.is_read(li) || Gorse.is_archive(li)) {
+				continue;
+			}
+			Gorse.set_read(li);
+		}
+	});
 });

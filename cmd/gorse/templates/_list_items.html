@@ -15,6 +15,8 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 |
 {{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort ascending</a>{{end}}
 {{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort descending</a>{{end}}
+|
+<a href="#" id="mark-all-read">Mark all read</a>
 </p>
 
 <form action="{{.Path}}/update_read_flags"
