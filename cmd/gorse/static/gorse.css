@@ -42,48 +42,6 @@ a:active h1 {
 	width: 50%;
 }
 
-.expand_feeds {
-	font-size: small;
-	font-weight: normal;
-}
-
-#feeds {
-	margin: 0;
-	padding: 0;
-	list-style: none inside none;
-	font-size: small;
-}
-#feeds li {
-	margin: 0;
-	padding: 0;
-}
-#feeds li h3 {
-	font-size: small;
-	display: inline-block;
-	margin: 0;
-	padding: 0;
-}
-#feeds li span {
-	font-size: smaller;
-}
-#feeds li span .next_time {
-	font-weight: bold;
-}
-#feeds li span .update_times {
-	font-style: italic;
-}
-
-.update_button {
-	width: 100%;
-	text-align: right;
-	margin: 0 0 10px 0;
-	padding: 0;
-}
-.update_button button {
-	padding: 25px 50px;
-	right: 0;
-}
-
 #items {
 	margin: 0;
 	padding: 0;
