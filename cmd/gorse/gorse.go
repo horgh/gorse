@@ -394,19 +394,17 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	var htmlItems []HTMLItem
 
 	for _, item := range items {
-		title, err := sanitiseItemText(item.Title)
-		if err != nil {
-			log.Printf("Failed to sanitise title: %s", err)
-			send500Error(rw, "Failed to format title")
-			return
-		}
+		title := sanitiseItemText(item.Title)
 
-		description, err := sanitiseItemText(item.Description)
-		if err != nil {
-			log.Printf("Failed to sanitise description: %s", err)
-			send500Error(rw, "Failed to format description")
-			return
-		}
+		// Make an HTML version of description. We set it as type HTML so the
+		// template execution knows not to re-encode it. We want to control the
+		// encoding more carefully for making links of URLs, for one.
+		description := getHTMLDescription(
+			substr(
+				sanitiseItemText(item.Description),
+				2000,
+			),
+		)
 
 		htmlItems = append(htmlItems, HTMLItem{
 			ID:              item.ID,
@@ -414,10 +412,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			Title:           title,
 			Link:            item.Link,
 			PublicationDate: item.PublicationDate.In(location).Format(time.RFC1123Z),
-			// Make an HTML version of description. We set it as type HTML so the
-			// template execution knows not to re-encode it. We want to control the
-			// encoding more carefully for making links of URLs, for one.
-			Description: getHTMLDescription(description),
+			Description:     description,
 		})
 	}
 
@@ -494,6 +489,17 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 	log.Print("Rendered list items page.")
+}
+
+func substr(s string, n int) string {
+	i := 0
+	for j := range s {
+		if i == n {
+			return s[:j]
+		}
+		i++
+	}
+	return s
 }
 
 // handlerUpdateReadFlags handles an update read flags (item state) request.

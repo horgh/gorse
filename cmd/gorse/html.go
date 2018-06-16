@@ -109,6 +109,10 @@ func getHTMLDescription(text string) template.HTML {
 	return template.HTML(re.ReplaceAllString(html, `<a href="$1">$1</a>`))
 }
 
+var htmlRE = regexp.MustCompile(`(?s)<.*?>`)
+
+var multiSpaceRE = regexp.MustCompile(`\s+`)
+
 // sanitiseItemText takes text (e.g., title or description) and removes any HTML
 // markup. This is because some feeds (e.g., Slashdot) include a lot of markup
 // I don't want to actually show.
@@ -137,25 +141,15 @@ func getHTMLDescription(text string) template.HTML {
 // In the database this is present as </em>.
 //
 // Thus we do not place the HTML into the page raw.
-func sanitiseItemText(text string) (string, error) {
+func sanitiseItemText(text string) string {
 	// First remove raw HTML.
-	re, err := regexp.Compile("(?s)<.*?>")
-	if err != nil {
-		log.Printf("Failed to compile html regexp: %s", err)
-		return text, err
-	}
-	text = re.ReplaceAllString(text, "")
+	text = htmlRE.ReplaceAllString(text, "")
 
 	// Decode HTML entities.
 	text = html.UnescapeString(text)
 
 	// Turn any multiple spaces into a single space.
-	re, err = regexp.Compile("(?s)\\s+")
-	if err != nil {
-		log.Printf("Failed to compile whitespace regexp: %s", err)
-		return text, err
-	}
-	text = re.ReplaceAllString(text, " ")
+	text = multiSpaceRE.ReplaceAllString(text, " ")
 
-	return text, nil
+	return text
 }
