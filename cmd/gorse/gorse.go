@@ -230,21 +230,21 @@ func (h HTTPHandler) ServeHTTP(rw http.ResponseWriter,
 
 	handlers := []RequestHandler{
 		// GET /
-		RequestHandler{
+		{
 			Method:      "GET",
 			PathPattern: "^/?$",
 			Func:        handlerListItems,
 		},
 
 		// POST /update_read_flags
-		RequestHandler{
+		{
 			Method:      "POST",
 			PathPattern: "^/update_read_flags$",
 			Func:        handlerUpdateReadFlags,
 		},
 
 		// GET /static/*
-		RequestHandler{
+		{
 			Method:      "GET",
 			PathPattern: "^/static/",
 			Func:        handlerStaticFiles,
