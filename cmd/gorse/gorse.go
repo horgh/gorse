@@ -391,7 +391,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		Description     template.HTML
 	}
 
-	htmlItems := []HTMLItem{}
+	var htmlItems []HTMLItem
 
 	for _, item := range items {
 		title, err := sanitiseItemText(item.Title)
