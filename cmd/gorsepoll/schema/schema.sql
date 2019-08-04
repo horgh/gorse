@@ -142,3 +142,6 @@ CREATE TABLE rss_item_read_after_archive (
 CREATE TRIGGER bu_rss_item_read_after_archive
 BEFORE UPDATE ON rss_item_read_after_archive
 FOR EACH ROW EXECUTE PROCEDURE trigger_set_update_time();
+
+
+CREATE INDEX ON rss_item (publication_date);

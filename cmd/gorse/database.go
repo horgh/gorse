@@ -89,7 +89,7 @@ func dbCountUnreadItems(
 		SELECT COUNT(*)
 		FROM rss_item ri
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE ris.state IS NULL
+		WHERE ri.publication_date > NOW() - INTERVAL '1 month' AND ris.state IS NULL
 `
 
 	row := db.QueryRow(query)
@@ -134,16 +134,16 @@ func dbRetrieveUnreadItems(
 
 	query := `
 		SELECT
-			rf.name,
 			ri.id,
 			ri.title,
 			ri.link,
 			ri.description,
-			ri.publication_date
+			ri.publication_date,
+			rf.name
 		FROM rss_item ri
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE ris.state IS NULL
+		WHERE ri.publication_date > NOW() - INTERVAL '1 month' AND ris.state IS NULL
 		ORDER BY ri.publication_date DESC, rf.name, ri.title
 		LIMIT $1 OFFSET $2
 `
@@ -161,12 +161,12 @@ func dbRetrieveUnreadItems(
 	for rows.Next() {
 		var item DBItem
 		if err := rows.Scan(
-			&item.FeedName,
 			&item.ID,
 			&item.Title,
 			&item.Link,
 			&item.Description,
 			&item.PublicationDate,
+			&item.FeedName,
 		); err != nil {
 			_ = rows.Close()
 			return nil, errors.Wrap(err, "error scanning row")
