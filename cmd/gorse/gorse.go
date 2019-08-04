@@ -361,13 +361,34 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		readState = gorse.ReadLater
 	}
 
-	// Retrieve items from the database.
-	items, err := dbRetrieveFeedItems(db, settings, order, page, userID,
-		readState)
-	if err != nil {
-		log.Printf("Failed to retrieve items: %s", err)
-		send500Error(rw, "Failed to retrieve items")
-		return
+	var items []DBItem
+	var totalItems int
+	if readState == gorse.ReadLater {
+		items, err = dbRetrieveReadLaterItems(db, settings, order, page, userID)
+		if err != nil {
+			log.Printf("%+v", err)
+			send500Error(rw, "Error retrieving items")
+			return
+		}
+		totalItems, err = dbCountReadLaterItems(db, userID)
+		if err != nil {
+			log.Print("%+v", err)
+			send500Error(rw, "Error looking up counts")
+			return
+		}
+	} else {
+		items, err = dbRetrieveUnreadItems(db, settings, order, page, userID)
+		if err != nil {
+			log.Printf("%+v", err)
+			send500Error(rw, "Error retrieving items")
+			return
+		}
+		totalItems, err = dbCountUnreadItems(db, userID)
+		if err != nil {
+			log.Print("%+v", err)
+			send500Error(rw, "Error looking up counts")
+			return
+		}
 	}
 
 	// Our display timezone location.
@@ -414,14 +435,6 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			PublicationDate: item.PublicationDate.In(location).Format(time.RFC1123Z),
 			Description:     description,
 		})
-	}
-
-	// Get count of total feed items (all pages).
-	totalItems, err := dbCountItems(db, userID, readState)
-	if err != nil {
-		log.Print(err)
-		send500Error(rw, "Failed to lookup count.")
-		return
 	}
 
 	totalPages := int(math.Ceil(float64(totalItems) / float64(pageSize)))

@@ -2,11 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 
 	"github.com/horgh/gorse"
+	"github.com/pkg/errors"
 )
 
 // DBItem holds the information about an input/entry that is in the database.
@@ -82,46 +82,55 @@ func getDB(settings *Config) (*sql.DB, error) {
 	return DB, nil
 }
 
-// dbCountItems retrieves a count of items.
-//
-// This is for pagination.
-func dbCountItems(db *sql.DB, userID int, state gorse.ReadState) (int, error) {
+func dbCountUnreadItems(
+	db *sql.DB,
+	userID int,
+) (int, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM rss_item ri
-		LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
-		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE COALESCE(ris.state, 'unread') = $1 AND
-			COALESCE(ris.user_id, $2) = $3
+		JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE ris.user_id = $1 AND ris.state IS NULL
 `
 
-	rows, err := db.Query(query, state.String(), userID, userID)
-	if err != nil {
-		return -1, err
-	}
-
-	if !rows.Next() {
-		return -1, errors.New("count not found")
-	}
+	row := db.QueryRow(query, userID)
 
 	var count int
-	if err := rows.Scan(&count); err != nil {
-		_ = rows.Close()
-		return -1, err
-	}
-
-	if err := rows.Close(); err != nil {
-		return -1, fmt.Errorf("problem closing rows: %s", err)
+	if err := row.Scan(&count); err != nil {
+		return -1, errors.Wrap(err, "error scanning row")
 	}
 
 	return count, nil
 }
 
-// dbRetrieveFeedItems retrieves feed items from the database which are marked
-// a given state.
-func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
-	page, userID int, state gorse.ReadState) ([]DBItem, error) {
+func dbCountReadLaterItems(
+	db *sql.DB,
+	userID int,
+) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM rss_item ri
+		JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE ris.user_id = $1 AND ris.state = 'read-later'
+`
 
+	row := db.QueryRow(query, userID)
+
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return -1, errors.Wrap(err, "error scanning row")
+	}
+
+	return count, nil
+}
+
+func dbRetrieveUnreadItems(
+	db *sql.DB,
+	settings *Config,
+	order sortOrder,
+	page,
+	userID int,
+) ([]DBItem, error) {
 	if page < 1 {
 		return nil, errors.New("invalid page number")
 	}
@@ -137,8 +146,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		FROM rss_item ri
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE COALESCE(ris.state, 'unread') = $1 AND
-			COALESCE(ris.user_id, $2) = $2
+		WHERE ris.user_id = $1 AND ris.state IS NULL
 `
 
 	if order == sortAscending {
@@ -147,32 +155,106 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
 	}
 
-	query += " LIMIT $3 OFFSET $4"
+	query += " LIMIT $2 OFFSET $3"
 
-	offset := (page - 1) * pageSize
-
-	rows, err := db.Query(query, state.String(), userID, pageSize, offset)
+	rows, err := db.Query(
+		query,
+		userID,
+		pageSize,
+		(page-1)*pageSize,
+	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error querying")
 	}
 
 	var items []DBItem
 	for rows.Next() {
-		item := DBItem{}
-
-		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.Link,
-			&item.Description, &item.PublicationDate)
-		if err != nil {
-			log.Printf("Failed to scan row information: %s", err)
+		var item DBItem
+		if err := rows.Scan(
+			&item.FeedName,
+			&item.ID,
+			&item.Title,
+			&item.Link,
+			&item.Description,
+			&item.PublicationDate,
+		); err != nil {
 			_ = rows.Close()
-			return nil, err
+			return nil, errors.Wrap(err, "error scanning row")
 		}
 
 		items = append(items, item)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failure fetching rows: %s", err)
+		return nil, errors.Wrap(err, "error retrieving rows")
+	}
+
+	return items, nil
+}
+
+func dbRetrieveReadLaterItems(
+	db *sql.DB,
+	settings *Config,
+	order sortOrder,
+	page,
+	userID int,
+) ([]DBItem, error) {
+	if page < 1 {
+		return nil, errors.New("invalid page number")
+	}
+
+	query := `
+		SELECT
+			rf.name,
+			ri.id,
+			ri.title,
+			ri.link,
+			ri.description,
+			ri.publication_date
+		FROM rss_item ri
+		JOIN rss_item_state ris ON ris.item_id = ri.id
+		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+		WHERE ris.user_id = $1 AND ris.state = 'read-later'
+`
+
+	if order == sortAscending {
+		query += "ORDER BY ri.publication_date ASC, rf.name, ri.title"
+	} else {
+		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
+	}
+
+	query += " LIMIT $2 OFFSET $3"
+
+	rows, err := db.Query(
+		query,
+		userID,
+		pageSize,
+		(page-1)*pageSize,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "error querying")
+	}
+
+	var items []DBItem
+	for rows.Next() {
+		var item DBItem
+		if err := rows.Scan(
+			&item.FeedName,
+			&item.ID,
+			&item.Title,
+			&item.Link,
+			&item.Description,
+			&item.PublicationDate,
+		); err != nil {
+			_ = rows.Close()
+			return nil, errors.Wrap(err, "error scanning row")
+		}
+
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error retrieving rows")
 	}
 
 	return items, nil
