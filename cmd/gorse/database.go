@@ -137,7 +137,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 			ri.publication_date,
 			ri.guid
 		FROM rss_item ri
-		LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
 		WHERE rf.active = true AND
 			COALESCE(ris.state, 'unread') = $1 AND
