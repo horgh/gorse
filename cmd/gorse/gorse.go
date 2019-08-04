@@ -355,13 +355,13 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			return
 		}
 	} else {
-		items, err = dbRetrieveUnreadItems(db, settings, page, userID)
+		items, err = dbRetrieveUnreadItems(db, settings, page)
 		if err != nil {
 			log.Printf("%+v", err)
 			send500Error(rw, "Error retrieving items")
 			return
 		}
-		totalItems, err = dbCountUnreadItems(db, userID)
+		totalItems, err = dbCountUnreadItems(db)
 		if err != nil {
 			log.Print("%+v", err)
 			send500Error(rw, "Error looking up counts")

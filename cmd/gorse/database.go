@@ -84,16 +84,15 @@ func getDB(settings *Config) (*sql.DB, error) {
 
 func dbCountUnreadItems(
 	db *sql.DB,
-	userID int,
 ) (int, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM rss_item ri
-		JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE ris.user_id = $1 AND ris.state IS NULL
+		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE ris.state IS NULL
 `
 
-	row := db.QueryRow(query, userID)
+	row := db.QueryRow(query)
 
 	var count int
 	if err := row.Scan(&count); err != nil {
@@ -127,8 +126,7 @@ func dbCountReadLaterItems(
 func dbRetrieveUnreadItems(
 	db *sql.DB,
 	settings *Config,
-	page,
-	userID int,
+	page int,
 ) ([]DBItem, error) {
 	if page < 1 {
 		return nil, errors.New("invalid page number")
@@ -145,14 +143,13 @@ func dbRetrieveUnreadItems(
 		FROM rss_item ri
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE ris.user_id = $1 AND ris.state IS NULL
+		WHERE ris.state IS NULL
 		ORDER BY ri.publication_date DESC, rf.name, ri.title
-		LIMIT $2 OFFSET $3
+		LIMIT $1 OFFSET $2
 `
 
 	rows, err := db.Query(
 		query,
-		userID,
 		pageSize,
 		(page-1)*pageSize,
 	)
