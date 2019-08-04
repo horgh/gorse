@@ -134,8 +134,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 			ri.title,
 			ri.link,
 			ri.description,
-			ri.publication_date,
-			ri.guid
+			ri.publication_date
 		FROM rss_item ri
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
@@ -164,7 +163,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		item := DBItem{}
 
 		err := rows.Scan(&item.FeedName, &item.ID, &item.Title, &item.Link,
-			&item.Description, &item.PublicationDate, &item.GUID)
+			&item.Description, &item.PublicationDate)
 		if err != nil {
 			log.Printf("Failed to scan row information: %s", err)
 			_ = rows.Close()
