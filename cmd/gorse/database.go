@@ -87,14 +87,13 @@ func getDB(settings *Config) (*sql.DB, error) {
 // This is for pagination.
 func dbCountItems(db *sql.DB, userID int, state gorse.ReadState) (int, error) {
 	query := `
-SELECT COUNT(1) AS count
-FROM rss_item ri
-LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
-LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-WHERE
-rf.active = true AND
-COALESCE(ris.state, 'unread') = $1 AND
-COALESCE(ris.user_id, $2) = $3
+		SELECT COUNT(*)
+		FROM rss_item ri
+		LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE rf.active = true AND
+			COALESCE(ris.state, 'unread') = $1 AND
+			COALESCE(ris.user_id, $2) = $3
 `
 
 	rows, err := db.Query(query, state.String(), userID, userID)
@@ -129,15 +128,20 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 	}
 
 	query := `
-SELECT
-rf.name, ri.id, ri.title, ri.link, ri.description, ri.publication_date, ri.guid
-FROM rss_item ri
-LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
-LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-WHERE
-rf.active = true AND
-COALESCE(ris.state, 'unread') = $1 AND
-COALESCE(ris.user_id, $2) = $3
+		SELECT
+			rf.name,
+			ri.id,
+			ri.title,
+			ri.link,
+			ri.description,
+			ri.publication_date,
+			ri.guid
+		FROM rss_item ri
+		LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
+		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE rf.active = true AND
+			COALESCE(ris.state, 'unread') = $1 AND
+			COALESCE(ris.user_id, $2) = $3
 `
 
 	if order == sortAscending {
@@ -181,14 +185,21 @@ COALESCE(ris.user_id, $2) = $3
 // state for the given user.
 func dbGetItem(db *sql.DB, itemID int64, userID int) (DBItem, error) {
 	query := `
-SELECT
-ri.id, ri.title, ri.description, ri.link, ri.publication_date, ri.guid,
-ri.rss_feed_id, rf.name, COALESCE(ris.state, 'unread')
-FROM rss_item ri
-JOIN rss_feed rf ON ri.rss_feed_id = rf.id
-LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-WHERE ri.id = $1 AND
-COALESCE(ris.user_id, $2) = $3
+		SELECT
+			ri.id,
+			ri.title,
+			ri.description,
+			ri.link,
+			ri.publication_date,
+			ri.guid,
+			ri.rss_feed_id,
+			rf.name,
+			COALESCE(ris.state, 'unread')
+		FROM rss_item ri
+		JOIN rss_feed rf ON ri.rss_feed_id = rf.id
+		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
+		WHERE ri.id = $1 AND
+			COALESCE(ris.user_id, $2) = $3
 `
 	rows, err := db.Query(query, itemID, userID, userID)
 	if err != nil {
@@ -225,9 +236,9 @@ COALESCE(ris.user_id, $2) = $3
 // looked at more closely than others.
 func dbRecordReadAfterReadLater(db *sql.DB, userID int, item DBItem) error {
 	query := `
-INSERT INTO rss_item_read_after_archive
-(user_id, rss_feed_id, rss_item_id)
-VALUES($1, $2, $3)
+		INSERT INTO rss_item_read_after_archive
+		(user_id, rss_feed_id, rss_item_id)
+		VALUES ($1, $2, $3)
 `
 	if _, err := db.Exec(query, userID, item.RSSFeedID, item.ID); err != nil {
 		return fmt.Errorf("unable to insert: %s", err)
