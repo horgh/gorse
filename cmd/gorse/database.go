@@ -91,8 +91,7 @@ func dbCountItems(db *sql.DB, userID int, state gorse.ReadState) (int, error) {
 		FROM rss_item ri
 		LEFT JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE rf.active = true AND
-			COALESCE(ris.state, 'unread') = $1 AND
+		WHERE COALESCE(ris.state, 'unread') = $1 AND
 			COALESCE(ris.user_id, $2) = $3
 `
 
@@ -138,8 +137,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		FROM rss_item ri
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
-		WHERE rf.active = true AND
-			COALESCE(ris.state, 'unread') = $1 AND
+		WHERE COALESCE(ris.state, 'unread') = $1 AND
 			COALESCE(ris.user_id, $2) = $2
 `
 
