@@ -141,7 +141,7 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
 		WHERE rf.active = true AND
 			COALESCE(ris.state, 'unread') = $1 AND
-			COALESCE(ris.user_id, $2) = $3
+			COALESCE(ris.user_id, $2) = $2
 `
 
 	if order == sortAscending {
@@ -150,11 +150,11 @@ func dbRetrieveFeedItems(db *sql.DB, settings *Config, order sortOrder,
 		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
 	}
 
-	query += " LIMIT $4 OFFSET $5"
+	query += " LIMIT $3 OFFSET $4"
 
 	offset := (page - 1) * pageSize
 
-	rows, err := db.Query(query, state.String(), userID, userID, pageSize, offset)
+	rows, err := db.Query(query, state.String(), userID, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
