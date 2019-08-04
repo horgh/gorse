@@ -127,7 +127,6 @@ func dbCountReadLaterItems(
 func dbRetrieveUnreadItems(
 	db *sql.DB,
 	settings *Config,
-	order sortOrder,
 	page,
 	userID int,
 ) ([]DBItem, error) {
@@ -147,15 +146,9 @@ func dbRetrieveUnreadItems(
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		LEFT JOIN rss_item_state ris ON ris.item_id = ri.id
 		WHERE ris.user_id = $1 AND ris.state IS NULL
+		ORDER BY ri.publication_date DESC, rf.name, ri.title
+		LIMIT $2 OFFSET $3
 `
-
-	if order == sortAscending {
-		query += "ORDER BY ri.publication_date ASC, rf.name, ri.title"
-	} else {
-		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
-	}
-
-	query += " LIMIT $2 OFFSET $3"
 
 	rows, err := db.Query(
 		query,
@@ -195,7 +188,6 @@ func dbRetrieveUnreadItems(
 func dbRetrieveReadLaterItems(
 	db *sql.DB,
 	settings *Config,
-	order sortOrder,
 	page,
 	userID int,
 ) ([]DBItem, error) {
@@ -215,15 +207,9 @@ func dbRetrieveReadLaterItems(
 		JOIN rss_item_state ris ON ris.item_id = ri.id
 		JOIN rss_feed rf ON rf.id = ri.rss_feed_id
 		WHERE ris.user_id = $1 AND ris.state = 'read-later'
+		ORDER BY ri.publication_date DESC, rf.name, ri.title
+		LIMIT $2 OFFSET $3
 `
-
-	if order == sortAscending {
-		query += "ORDER BY ri.publication_date ASC, rf.name, ri.title"
-	} else {
-		query += "ORDER BY ri.publication_date DESC, rf.name, ri.title"
-	}
-
-	query += " LIMIT $2 OFFSET $3"
 
 	rows, err := db.Query(
 		query,

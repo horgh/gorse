@@ -80,13 +80,6 @@ type HTTPHandler struct {
 	sessionStore *sessions.CookieStore
 }
 
-type sortOrder int
-
-const (
-	sortAscending sortOrder = iota
-	sortDescending
-)
-
 const pageSize = 50
 
 func main() {
@@ -312,22 +305,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	// We can be told different sort display order. This is in the URL.
 	requestValues := request.URL.Query()
-
-	// Default is date descending.
-	order := sortDescending
-	reverseSortOrder := "date-asc"
-
-	sortRaw := requestValues.Get("sort-order")
-	if sortRaw == "" || sortRaw == "date-desc" {
-		order = sortDescending
-		reverseSortOrder = "date-asc"
-	}
-	if sortRaw == "date-asc" {
-		order = sortAscending
-		reverseSortOrder = "date-desc"
-	}
 
 	page := 1
 	pageParam := requestValues.Get("page")
@@ -364,7 +342,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	var items []DBItem
 	var totalItems int
 	if readState == gorse.ReadLater {
-		items, err = dbRetrieveReadLaterItems(db, settings, order, page, userID)
+		items, err = dbRetrieveReadLaterItems(db, settings, page, userID)
 		if err != nil {
 			log.Printf("%+v", err)
 			send500Error(rw, "Error retrieving items")
@@ -377,7 +355,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 			return
 		}
 	} else {
-		items, err = dbRetrieveUnreadItems(db, settings, order, page, userID)
+		items, err = dbRetrieveUnreadItems(db, settings, page, userID)
 		if err != nil {
 			log.Printf("%+v", err)
 			send500Error(rw, "Error retrieving items")
@@ -464,35 +442,31 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 	// Show the page.
 
 	type ListItemsPage struct {
-		Items            []HTMLItem
-		SuccessMessages  []string
-		Path             string
-		SortOrder        string
-		ReverseSortOrder string
-		TotalItems       int
-		Page             int
-		NextPage         int
-		PreviousPage     int
-		UserID           int
-		ReadState        gorse.ReadState
-		Unread           gorse.ReadState
-		ReadLater        gorse.ReadState
+		Items           []HTMLItem
+		SuccessMessages []string
+		Path            string
+		TotalItems      int
+		Page            int
+		NextPage        int
+		PreviousPage    int
+		UserID          int
+		ReadState       gorse.ReadState
+		Unread          gorse.ReadState
+		ReadLater       gorse.ReadState
 	}
 
 	listItemsPage := ListItemsPage{
-		Items:            htmlItems,
-		SuccessMessages:  successMessages,
-		Path:             settings.URIPrefix,
-		SortOrder:        sortRaw,
-		ReverseSortOrder: reverseSortOrder,
-		TotalItems:       totalItems,
-		Page:             page,
-		NextPage:         nextPage,
-		PreviousPage:     prevPage,
-		UserID:           userID,
-		ReadState:        readState,
-		Unread:           gorse.Unread,
-		ReadLater:        gorse.ReadLater,
+		Items:           htmlItems,
+		SuccessMessages: successMessages,
+		Path:            settings.URIPrefix,
+		TotalItems:      totalItems,
+		Page:            page,
+		NextPage:        nextPage,
+		PreviousPage:    prevPage,
+		UserID:          userID,
+		ReadState:       readState,
+		Unread:          gorse.Unread,
+		ReadLater:       gorse.ReadLater,
 	}
 
 	err = renderPage(settings, rw, "_list_items", listItemsPage)
@@ -654,9 +628,8 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	uri := fmt.Sprintf("%s/?sort-order=%s&user-id=%d&read-state=%s",
+	uri := fmt.Sprintf("%s/?user-id=%d&read-state=%s",
 		settings.URIPrefix,
-		url.QueryEscape(request.PostForm.Get("sort-order")),
 		userID,
 		url.QueryEscape(readState.String()))
 

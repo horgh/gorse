@@ -10,11 +10,8 @@
 
 <p>
 Showing {{len .Items}}/{{.TotalItems}} feed items.
-{{if eq .ReadState .Unread}}<a href="{{.Path}}?sort-order={{.SortOrder}}&amp;user-id={{.UserID}}&amp;read-state=read-later">Archived</a>{{end}}
-{{if eq .ReadState .ReadLater}}<a href="{{.Path}}?sort-order={{.SortOrder}}&amp;user-id={{.UserID}}&amp;read-state=unread">Unread</a>{{end}}
-|
-{{if eq .ReverseSortOrder "date-asc"}}<a href="{{.Path}}?sort-order=date-asc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort ascending</a>{{end}}
-{{if eq .ReverseSortOrder "date-desc"}}<a href="{{.Path}}?sort-order=date-desc&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Sort descending</a>{{end}}
+{{if eq .ReadState .Unread}}<a href="{{.Path}}?user-id={{.UserID}}&amp;read-state=read-later">Archived</a>{{end}}
+{{if eq .ReadState .ReadLater}}<a href="{{.Path}}?user-id={{.UserID}}&amp;read-state=unread">Unread</a>{{end}}
 |
 <a href="#" id="mark-all-read">Mark all read</a>
 </p>
@@ -24,7 +21,6 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 	autocomplete="off"
 	id="list-items-form"
 	>
-	<input type="hidden" name="sort-order" value="{{.SortOrder}}">
 	<input type="hidden" name="user-id" value="{{.UserID}}">
 	<input type="hidden" name="read-state" value="{{.ReadState}}">
 
@@ -58,5 +54,5 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 	<button>Save</button>
 </form>
 
-{{if gt .Page 1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.PreviousPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Previous page</a>{{end}}
-{{if ne .NextPage -1}}<a href="{{.Path}}?sort-order={{.SortOrder}}&page={{.NextPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Next page</a>{{end}}
+{{if gt .Page 1}}<a href="{{.Path}}?page={{.PreviousPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Previous page</a>{{end}}
+{{if ne .NextPage -1}}<a href="{{.Path}}?page={{.NextPage}}&amp;user-id={{.UserID}}&amp;read-state={{.ReadState}}">Next page</a>{{end}}
