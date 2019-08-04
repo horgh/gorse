@@ -23,6 +23,7 @@ Showing {{len .Items}}/{{.TotalItems}} feed items.
 	>
 	<input type="hidden" name="user-id" value="{{.UserID}}">
 	<input type="hidden" name="read-state" value="{{.ReadState}}">
+	<input type="hidden" name="page" value="{{.Page}}">
 
 	<ul id="items">
 		{{range $index, $element := .Items}}

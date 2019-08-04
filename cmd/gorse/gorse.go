@@ -628,10 +628,12 @@ func handlerUpdateReadFlags(rw http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	uri := fmt.Sprintf("%s/?user-id=%d&read-state=%s",
+	uri := fmt.Sprintf("%s/?user-id=%d&read-state=%s&page=%s",
 		settings.URIPrefix,
 		userID,
-		url.QueryEscape(readState.String()))
+		url.QueryEscape(readState.String()),
+		url.QueryEscape(request.PostForm.Get("page")),
+	)
 
 	log.Printf("Redirecting to %s", uri)
 
