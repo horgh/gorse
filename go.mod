@@ -7,9 +7,9 @@ require (
 	github.com/gorilla/context v1.1.1
 	github.com/gorilla/sessions v1.2.0
 	github.com/horgh/config v0.0.0-20190101204049-770bc48a3bdf
-	github.com/horgh/rss v0.0.0-20190413053113-838e5cd532ed
-	github.com/lib/pq v1.2.0
-	github.com/pkg/errors v0.8.1
-	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80 // indirect
+	github.com/horgh/rss v0.0.0-20200307170423-06a11e1c9140
+	github.com/lib/pq v1.3.0
+	github.com/pkg/errors v0.9.1
+	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
 	golang.org/x/text v0.3.2 // indirect
 )
