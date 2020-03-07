@@ -263,33 +263,23 @@ func dbGetItem(db *sql.DB, itemID int64, userID int) (DBItem, error) {
 		WHERE ri.id = $1 AND
 			COALESCE(ris.user_id, $2) = $3
 `
-	rows, err := db.Query(query, itemID, userID, userID)
-	if err != nil {
-		return DBItem{}, err
+	row := db.QueryRow(query, itemID, userID, userID)
+	item := DBItem{}
+	if err := row.Scan(
+		&item.ID,
+		&item.Title,
+		&item.Description,
+		&item.Link,
+		&item.PublicationDate,
+		&item.GUID,
+		&item.RSSFeedID,
+		&item.FeedName,
+		&item.ReadState,
+	); err != nil {
+		return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
 	}
 
-	for rows.Next() {
-		item := DBItem{}
-
-		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
-			&item.PublicationDate, &item.GUID, &item.RSSFeedID, &item.FeedName,
-			&item.ReadState); err != nil {
-			_ = rows.Close()
-			return DBItem{}, fmt.Errorf("failed to scan row: %s", err)
-		}
-
-		if err := rows.Close(); err != nil {
-			return DBItem{}, fmt.Errorf("error closing rows: %s", err)
-		}
-
-		return item, nil
-	}
-
-	if err := rows.Err(); err != nil {
-		return DBItem{}, fmt.Errorf("failure fetching rows: %s", err)
-	}
-
-	return DBItem{}, fmt.Errorf("item not found")
+	return item, nil
 }
 
 // Record the item was read after having been saved to read later.
