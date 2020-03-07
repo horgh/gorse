@@ -31,9 +31,6 @@ type DBItem struct {
 	GUID            *string
 }
 
-// ErrItemNotFound means the item was not found in the database.
-var ErrItemNotFound = fmt.Errorf("item not found")
-
 // DBSetItemReadState sets the item's read state for the user.
 func DBSetItemReadState(db *sql.DB, id int64, userID int,
 	state ReadState) error {
@@ -75,30 +72,19 @@ WHERE rss_feed_id = $1 AND
 link = $2
 `
 
-	rows, err := db.Query(query, feedID, link)
-	if err != nil {
-		return nil, err
+	row := db.QueryRow(query, feedID, link)
+	item := &DBItem{}
+	if err := row.Scan(
+		&item.ID,
+		&item.Title,
+		&item.Description,
+		&item.Link,
+		&item.RSSFeedID,
+		&item.PublicationDate,
+		&item.GUID,
+	); err != nil {
+		return nil, fmt.Errorf("failed to scan row: %s", err)
 	}
 
-	for rows.Next() {
-		item := &DBItem{}
-
-		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Link,
-			&item.RSSFeedID, &item.PublicationDate, &item.GUID); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("failed to scan row: %s", err)
-		}
-
-		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("error closing rows: %s", err)
-		}
-
-		return item, nil
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failure fetching rows: %s", err)
-	}
-
-	return nil, ErrItemNotFound
+	return item, nil
 }
