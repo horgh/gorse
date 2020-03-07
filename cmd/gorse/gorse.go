@@ -350,7 +350,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		}
 		totalItems, err = dbCountReadLaterItems(db, userID)
 		if err != nil {
-			log.Print("%+v", err)
+			log.Printf("%+v", err)
 			send500Error(rw, "Error looking up counts")
 			return
 		}
@@ -363,7 +363,7 @@ func handlerListItems(rw http.ResponseWriter, request *http.Request,
 		}
 		totalItems, err = dbCountUnreadItems(db)
 		if err != nil {
-			log.Print("%+v", err)
+			log.Printf("%+v", err)
 			send500Error(rw, "Error looking up counts")
 			return
 		}
