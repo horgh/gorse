@@ -247,11 +247,7 @@ func shouldUpdateFeed(config *Config, feed *DBFeed, ignorePollTimes bool) bool {
 
 	timeSince := time.Since(*feed.LastUpdateTime)
 
-	if int64(timeSince.Seconds()) < feed.UpdateFrequencySeconds {
-		return false
-	}
-
-	return true
+	return int64(timeSince.Seconds()) >= feed.UpdateFrequencySeconds
 }
 
 // updateFeed fetches, parses, and stores the new items in a feed.
