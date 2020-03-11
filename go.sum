@@ -15,6 +15,8 @@ github.com/horgh/rss v0.0.0-20190413053113-838e5cd532ed h1:DjBnevIOcBZiElXde69vs
 github.com/horgh/rss v0.0.0-20190413053113-838e5cd532ed/go.mod h1:8mWEIsOVBhqZBibyjb1J8coClRszlNXaT0IW3aj/fb0=
 github.com/horgh/rss v0.0.0-20200307170423-06a11e1c9140 h1:VKqeLyJhRdMvrK03CcE5G3AIDrTa/82pyIUTxo0jgEg=
 github.com/horgh/rss v0.0.0-20200307170423-06a11e1c9140/go.mod h1:wCnuMIJcOQK5Y+9Zmk8mhAYz/0cl0DDUtytk7PSAb64=
+github.com/horgh/rss v0.0.0-20200311023313-e79b0ba58a1c h1:+EV/TKi3uyzTWEUsLRb+yMr/hn6KW9VNgtQIeA01zfw=
+github.com/horgh/rss v0.0.0-20200311023313-e79b0ba58a1c/go.mod h1:Cdu9pMEelNm+XRKTNWPY+cWsvEy8RpFHciO62Wy8jrY=
 github.com/lib/pq v1.2.0 h1:LXpIM/LZ5xGFhOpXAQUIMM1HdyqzVYM13zNdjCEEcA0=
 github.com/lib/pq v1.2.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
 github.com/lib/pq v1.3.0 h1:/qkRGz8zljWiDcFvgpwUpwIAPu3r07TDvs3Rws+o/pU=
