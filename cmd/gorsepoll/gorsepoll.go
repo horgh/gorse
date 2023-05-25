@@ -347,7 +347,14 @@ func retrieveFeed(feed *DBFeed) ([]byte, error) {
 		Timeout:   time.Second * 10,
 	}
 
-	httpResponse, err := httpClient.Get(feed.URI)
+	req, err := http.NewRequest(http.MethodGet, feed.URI, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "curl/7.74.0")
+
+	httpResponse, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request for feed failed. (%s): %s", feed.Name,
 			err)
