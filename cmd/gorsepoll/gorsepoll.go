@@ -1,11 +1,11 @@
 // RSS feed poller.
 //
 // This program works roughly as follows:
-// - Find RSS feeds from a database.
-// - For every RSS feed, if it was last fetched less than its update frequency
-//   ago, retrieve it and then record that a retrieval was done.
-// - For every item fetched from the feed, add information about that item into
-//   the database (if it's not there yet).
+//   - Find RSS feeds from a database.
+//   - For every RSS feed, if it was last fetched less than its update frequency
+//     ago, retrieve it and then record that a retrieval was done.
+//   - For every item fetched from the feed, add information about that item into
+//     the database (if it's not there yet).
 //
 // This program is intended to be run periodically through something like cron.
 //
